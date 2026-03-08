@@ -26,6 +26,7 @@ export interface Table {
   color: string
   position: { x: number; y: number }
   groupId: string | null
+  groupLocked: boolean   // when true, groupId cannot be changed by geometry or drag
 }
 
 export type RelationType = 'one-to-one' | 'one-to-many' | 'many-to-many'
@@ -46,7 +47,9 @@ export interface TableGroup {
   color: string
   position: { x: number; y: number }
   size: { w: number; h: number }
+  parentGroupId: string | null  // for nested groups
 }
+
 
 export interface Schema {
   id: string

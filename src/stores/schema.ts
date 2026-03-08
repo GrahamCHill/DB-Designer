@@ -56,6 +56,7 @@ export const useSchemaStore = defineStore('schema', () => {
       comment: '',
       color: DEFAULT_COLORS[s.tables.length % DEFAULT_COLORS.length],
       position, groupId,
+      groupLocked: false,
       columns: [{ id: uuidv4(), name: 'id', type: 'UUID', nullable: false,
         primaryKey: true, unique: true, defaultValue: 'gen_random_uuid()', comment: '' }],
     }
@@ -112,9 +113,11 @@ export const useSchemaStore = defineStore('schema', () => {
     const table = s.tables.find(t => t.id === tableId)
     if (!table) return
     table.position = position
-    if (commit) {
+    if (commit && !table.groupLocked) {
       table.groupId = resolveTableGroup({ ...table, position }, s.groups)
       persist()
+    } else if (commit) {
+      persist() // still persist position, just not group change
     }
   }
 
@@ -233,7 +236,12 @@ export const useSchemaStore = defineStore('schema', () => {
 
   function assignTableToGroup(tableId: string, groupId: string | null) {
     const t = sc().tables.find(t => t.id === tableId)
-    if (t) { t.groupId = groupId; persist() }
+    if (t && !t.groupLocked) { t.groupId = groupId; persist() }
+  }
+
+  function toggleTableLock(tableId: string) {
+    const t = sc().tables.find(t => t.id === tableId)
+    if (t) { t.groupLocked = !t.groupLocked; persist() }
   }
 
   // SQL Export
@@ -290,7 +298,7 @@ export const useSchemaStore = defineStore('schema', () => {
   function loadFromJSON(json: Schema) {
     if (!json.groups) json.groups = []
     json.groups = json.groups.map(g => ({ parentGroupId: null, ...g }))
-    json.tables = json.tables.map(t => ({ groupId: null, ...t }))
+    json.tables = json.tables.map(t => ({ groupId: null, groupLocked: false, ...t }))
     tabsStore.loadSchemaIntoNewTab(json)
     clearSelection()
   }
@@ -308,7 +316,7 @@ export const useSchemaStore = defineStore('schema', () => {
     createGroup, updateGroup, deleteGroup,
     updateGroupPosition, commitGroupDrop,
     updateGroupSize, commitGroupSize,
-    assignTableToGroup,
+    assignTableToGroup, toggleTableLock,
     exportSQL, saveToFile, loadFromJSON, newSchema,
   }
 })

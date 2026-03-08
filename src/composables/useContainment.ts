@@ -155,6 +155,7 @@ export function applyGroupDrop(
   // Re-resolve every owned table — may have moved in/out of sub-groups
   for (const table of tables) {
     if (!ownedTablesBefore.has(table.id)) continue
+    if ((table as any).groupLocked) continue   // locked — leave groupId as-is
     tableChanges[table.id] = resolveTableGroup(table, groups)
   }
 
@@ -191,6 +192,9 @@ export function applyGroupResize(
   const r = groupRect(resizedGroup)
 
   for (const table of tables) {
+    // Never touch locked tables
+    if ((table as any).groupLocked) continue
+
     const centre = rectCentre(tableRect(table))
     const inside = pointInRect(r, centre)
 
@@ -198,7 +202,7 @@ export function applyGroupResize(
       // Unowned and now inside — claim it
       changes[table.id] = resizedGroup.id
     } else if (table.groupId === resizedGroup.id && !inside) {
-      // Was ours but now outside — release (back to null or another group)
+      // Was ours but now outside — release
       changes[table.id] = resolveTableGroup(table, groups)
     }
     // else: owned by someone else — never touch
