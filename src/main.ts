@@ -8,6 +8,5 @@ app.use(pinia)
 
 // Boot tabs store first so schema store can reference it
 import { useTabsStore } from './stores/tabs'
-const tabsStore = useTabsStore(pinia)
-
+useTabsStore(pinia);
 app.mount('#app')

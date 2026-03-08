@@ -77,6 +77,8 @@
         @start-relation="startRelation(table.id, $event)"
         @end-relation="endRelation(table.id, $event)"
         @edit="store.editingTableId = table.id"
+        @delete="store.deleteTable(table.id)"
+        @resize-start="startTableResize(table.id, $event)"
       />
     </div>
 
@@ -137,6 +139,23 @@ const canvasW  = ref(800)
 const canvasH  = ref(600)
 
 onMounted(() => {
+  // Delete key removes selected table or relation
+  const onKeyDown = (e: KeyboardEvent) => {
+    const tag = (e.target as HTMLElement).tagName.toLowerCase()
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      if (store.selectedTableId) {
+        store.deleteTable(store.selectedTableId)
+        e.preventDefault()
+      } else if (store.selectedRelationId) {
+        store.deleteRelation(store.selectedRelationId)
+        e.preventDefault()
+      }
+    }
+  }
+  window.addEventListener('keydown', onKeyDown)
+  // Clean up on unmount would need onUnmounted — skipping for now as canvas lives for app lifetime
+
   if (canvasEl.value && typeof ResizeObserver !== 'undefined') {
     const ro = new ResizeObserver(entries => {
       for (const e of entries) {
@@ -191,6 +210,12 @@ type TableDrag = {
   origX: number; origY: number
 }
 
+type TableResizeDrag = {
+  kind: 'table-resize'
+  id: string
+  origW: number
+}
+
 type GroupDrag = {
   kind: 'group'
   id: string
@@ -211,7 +236,7 @@ type ResizeDrag = {
 
 type PanDrag = { kind: 'pan' }
 
-type AnyDrag = (TableDrag | GroupDrag | ResizeDrag | PanDrag) & {
+type AnyDrag = (TableDrag | TableResizeDrag | GroupDrag | ResizeDrag | PanDrag) & {
   startClientX: number
   startClientY: number
 }
@@ -239,7 +264,7 @@ function connectorPos(tableId: string, colId: string, side: 'left' | 'right') {
   if (!table) return { x: 0, y: 0 }
   const idx = Math.max(0, table.columns.findIndex(c => c.id === colId))
   return {
-    x: table.position.x + (side === 'right' ? TABLE_WIDTH : 0),
+    x: table.position.x + (side === 'right' ? (table.width ?? TABLE_WIDTH) : 0),
     y: table.position.y + TABLE_HEADER_H + TABLE_COL_PAD_TOP + idx * TABLE_ROW_H + TABLE_ROW_H / 2,
   }
 }
@@ -355,6 +380,9 @@ function onMouseMove(e: MouseEvent) {
   } else if (d.kind === 'table') {
     store.updateTablePosition(d.id, { x: d.origX + dx, y: d.origY + dy })
 
+  } else if (d.kind === 'table-resize') {
+    store.updateTableWidth(d.id, Math.max(240, d.origW + dx))
+
   } else if (d.kind === 'group') {
     // Move this group
     store.updateGroupPosition(d.id, { x: d.origX + dx, y: d.origY + dy })
@@ -386,6 +414,9 @@ function onMouseUp() {
     // T1: assign to smallest group containing table centre
     const table = store.schema.tables.find(t => t.id === d.id)
     if (table) store.updateTablePosition(d.id, table.position, true)
+
+  } else if (d.kind === 'table-resize') {
+    store.commitTableWidth()
 
   } else if (d.kind === 'group') {
     // S1: apply group drop — only reassigns owned items, never steals
@@ -426,6 +457,16 @@ function startTableDrag(tableId: string, e: MouseEvent) {
   drag.value = {
     kind: 'table', id: tableId,
     origX: table.position.x, origY: table.position.y,
+    startClientX: e.clientX, startClientY: e.clientY,
+  }
+}
+
+function startTableResize(tableId: string, e: MouseEvent) {
+  const table = store.schema.tables.find(t => t.id === tableId)!
+  selectTable(tableId)
+  drag.value = {
+    kind: 'table-resize', id: tableId,
+    origW: table.width ?? TABLE_WIDTH,
     startClientX: e.clientX, startClientY: e.clientY,
   }
 }

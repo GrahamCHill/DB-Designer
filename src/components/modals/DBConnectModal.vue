@@ -103,7 +103,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
 import { useSchemaStore } from '../../stores/schema'
-import type { Schema, SQLDialect } from '../../types'
+import type { Schema } from '../../types'
 
 // Tauri invoke — gracefully degrades if not in Tauri context
 async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {

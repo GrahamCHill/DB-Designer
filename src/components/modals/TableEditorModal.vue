@@ -60,7 +60,8 @@
                   type="checkbox"
                   class="col-check"
                   v-model="col.primaryKey"
-                  @change="if(col.primaryKey) { col.nullable = false; col.unique = true }"
+                  @change="if(col.primaryKey)
+                  { col.nullable = false; col.unique = true }"
                 />
                 <input
                   type="checkbox"
@@ -106,16 +107,16 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watch } from 'vue'
+import { reactive } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import { useSchemaStore } from '../../stores/schema'
-import type { Table, Column, ColumnType } from '../../types'
+import type { Table, Column } from '../../types'
 
 // Simple draggable list using native HTML5 drag
 const DraggableList = {
   props: ['columns'],
   emits: ['update'],
-  setup(props: any, { emit, slots }: any) {
+  setup(props: any, {slots }: any) {
     return () => {
       const cols = props.columns
       return cols.map((col: Column, i: number) =>

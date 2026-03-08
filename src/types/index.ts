@@ -26,7 +26,8 @@ export interface Table {
   color: string
   position: { x: number; y: number }
   groupId: string | null
-  groupLocked: boolean   // when true, groupId cannot be changed by geometry or drag
+  groupLocked: boolean
+  width: number            // px, defaults to TABLE_WIDTH   // when true, groupId cannot be changed by geometry or drag
 }
 
 export type RelationType = 'one-to-one' | 'one-to-many' | 'many-to-many'

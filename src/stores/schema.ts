@@ -2,13 +2,12 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import type { Schema, Table, Column, Relation, TableGroup, SQLDialect } from '../types'
+import { TABLE_WIDTH } from '../types'
 import { useTabsStore } from './tabs'
 import {
   resolveTableGroup,
-  resolveGroupParent,
   applyGroupDrop,
   applyGroupResize,
-  getDescendants,
 } from '../composables/useContainment'
 
 const DEFAULT_COLORS = ['#3ECF8E','#3B82F6','#8B5CF6','#F59E0B','#EF4444','#06B6D4','#EC4899','#10B981']
@@ -57,6 +56,7 @@ export const useSchemaStore = defineStore('schema', () => {
       color: DEFAULT_COLORS[s.tables.length % DEFAULT_COLORS.length],
       position, groupId,
       groupLocked: false,
+      width: TABLE_WIDTH,
       columns: [{ id: uuidv4(), name: 'id', type: 'UUID', nullable: false,
         primaryKey: true, unique: true, defaultValue: 'gen_random_uuid()', comment: '' }],
     }
@@ -119,6 +119,15 @@ export const useSchemaStore = defineStore('schema', () => {
     } else if (commit) {
       persist() // still persist position, just not group change
     }
+  }
+
+  function updateTableWidth(tableId: string, width: number) {
+    const t = sc().tables.find(t => t.id === tableId)
+    if (t) t.width = Math.max(240, width)
+  }
+
+  function commitTableWidth() {
+    persist()
   }
 
   // Relations
@@ -230,6 +239,7 @@ export const useSchemaStore = defineStore('schema', () => {
     }
   }
 
+  // @ts-ignore_groupId
   function commitGroupSize(groupId: string) {
     persist()
   }
@@ -297,8 +307,10 @@ export const useSchemaStore = defineStore('schema', () => {
 
   function loadFromJSON(json: Schema) {
     if (!json.groups) json.groups = []
+    // @ts-ignore
     json.groups = json.groups.map(g => ({ parentGroupId: null, ...g }))
-    json.tables = json.tables.map(t => ({ groupId: null, groupLocked: false, ...t }))
+    // @ts-ignore
+    json.tables = json.tables.map(t => ({ groupId: null, groupLocked: false, width: TABLE_WIDTH, ...t }))
     tabsStore.loadSchemaIntoNewTab(json)
     clearSelection()
   }
@@ -311,7 +323,7 @@ export const useSchemaStore = defineStore('schema', () => {
     selectedTable, selectedGroup, clearSelection,
     createTable, updateTable, deleteTable,
     addColumn, updateColumn, deleteColumn,
-    updateTablePosition,
+    updateTablePosition, updateTableWidth, commitTableWidth,
     addRelation, updateRelation, deleteRelation,
     createGroup, updateGroup, deleteGroup,
     updateGroupPosition, commitGroupDrop,

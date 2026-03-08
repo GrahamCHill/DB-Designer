@@ -42,7 +42,10 @@ import { useSchemaStore } from '../../stores/schema'
 import type { SQLDialect } from '../../types'
 
 const store = useSchemaStore()
-const emit = defineEmits<{ close: [] }>()
+
+defineEmits<{
+  (e: 'close'): void
+}>()
 
 const dialects: { label: string; value: SQLDialect }[] = [
   { label: 'PostgreSQL', value: 'postgresql' },

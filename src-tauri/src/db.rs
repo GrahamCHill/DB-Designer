@@ -181,7 +181,7 @@ fn map_mysql_type(t: &str) -> String {
 }
 
 fn table_colors() -> Vec<&'static str> {
-    &[
+    vec![
         "#3ECF8E", "#3B82F6", "#8B5CF6", "#F59E0B",
         "#EF4444", "#06B6D4", "#EC4899", "#10B981",
     ]
@@ -205,7 +205,8 @@ mod pg_impl {
         let pool = PgPool::connect(&args.pg_url()).await.map_err(|e| e.to_string())?;
 
         // Fetch tables
-        let rows = sqlx::query!(
+        use sqlx::Row;
+        let rows = sqlx::query(
             r#"
             SELECT table_name
             FROM information_schema.tables
@@ -215,19 +216,19 @@ mod pg_impl {
         )
         .fetch_all(&pool)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e: sqlx::Error| e.to_string())?;
 
         let colors = table_colors();
         let mut tables: Vec<SchemaTable> = Vec::new();
         let mut table_id_map: std::collections::HashMap<String, String> = Default::default();
 
         for (i, row) in rows.iter().enumerate() {
-            let table_name = &row.table_name;
+            let table_name: String = row.try_get("table_name").map_err(|e| e.to_string())?;
             let table_id = Uuid::new_v4().to_string();
             table_id_map.insert(table_name.clone(), table_id.clone());
 
             // Fetch columns
-            let col_rows = sqlx::query!(
+            let col_rows = sqlx::query(
                 r#"
                 SELECT
                     c.column_name,
@@ -260,22 +261,25 @@ mod pg_impl {
                 WHERE c.table_schema = 'public' AND c.table_name = $1
                 ORDER BY c.ordinal_position
                 "#,
-                table_name
             )
+            .bind(&table_name)
             .fetch_all(&pool)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e: sqlx::Error| e.to_string())?;
 
-            let columns: Vec<SchemaColumn> = col_rows.iter().map(|c| SchemaColumn {
-                id: Uuid::new_v4().to_string(),
-                name: c.column_name.clone(),
-                col_type: map_pg_type(&c.data_type),
-                nullable: c.is_nullable == "YES",
-                primary_key: c.is_pk.unwrap_or(false),
-                unique: c.is_unique.unwrap_or(false),
-                default_value: c.column_default.clone().unwrap_or_default(),
-                comment: String::new(),
-            }).collect();
+            let mut columns: Vec<SchemaColumn> = Vec::new();
+            for c in col_rows {
+                columns.push(SchemaColumn {
+                    id: Uuid::new_v4().to_string(),
+                    name: c.try_get("column_name").map_err(|e| e.to_string())?,
+                    col_type: map_pg_type(&c.try_get::<String, _>("data_type").map_err(|e| e.to_string())?),
+                    nullable: c.try_get::<String, _>("is_nullable").map_err(|e| e.to_string())? == "YES",
+                    primary_key: c.try_get::<bool, _>("is_pk").unwrap_or(false),
+                    unique: c.try_get::<bool, _>("is_unique").unwrap_or(false),
+                    default_value: c.try_get::<Option<String>, _>("column_default").unwrap_or_default().unwrap_or_default(),
+                    comment: String::new(),
+                });
+            }
 
             let cols_per_row = 3usize;
             let x = (i % cols_per_row) as f64 * 380.0 + 60.0;
@@ -293,7 +297,7 @@ mod pg_impl {
         }
 
         // Fetch FK relations
-        let fk_rows = sqlx::query!(
+        let fk_rows = sqlx::query(
             r#"
             SELECT
                 tc.table_name AS source_table,
@@ -310,16 +314,21 @@ mod pg_impl {
         )
         .fetch_all(&pool)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e: sqlx::Error| e.to_string())?;
 
         let mut relations: Vec<SchemaRelation> = Vec::new();
         for fk in &fk_rows {
-            let src_tid = match table_id_map.get(&fk.source_table) { Some(v) => v.clone(), None => continue };
-            let tgt_tid = match table_id_map.get(&fk.target_table) { Some(v) => v.clone(), None => continue };
+            let s_table: String = fk.try_get("source_table").map_err(|e| e.to_string())?;
+            let s_col: String = fk.try_get("source_col").map_err(|e| e.to_string())?;
+            let t_table: String = fk.try_get("target_table").map_err(|e| e.to_string())?;
+            let t_col: String = fk.try_get("target_col").map_err(|e| e.to_string())?;
+
+            let src_tid = match table_id_map.get(&s_table) { Some(v) => v.clone(), None => continue };
+            let tgt_tid = match table_id_map.get(&t_table) { Some(v) => v.clone(), None => continue };
             let src_table = match tables.iter().find(|t| t.id == src_tid) { Some(v) => v, None => continue };
             let tgt_table = match tables.iter().find(|t| t.id == tgt_tid) { Some(v) => v, None => continue };
-            let src_cid = match src_table.columns.iter().find(|c| c.name == fk.source_col) { Some(v) => v.id.clone(), None => continue };
-            let tgt_cid = match tgt_table.columns.iter().find(|c| c.name == fk.target_col) { Some(v) => v.id.clone(), None => continue };
+            let src_cid = match src_table.columns.iter().find(|c| c.name == s_col) { Some(v) => v.id.clone(), None => continue };
+            let tgt_cid = match tgt_table.columns.iter().find(|c| c.name == t_col) { Some(v) => v.id.clone(), None => continue };
             relations.push(SchemaRelation {
                 id: Uuid::new_v4().to_string(),
                 source_table_id: src_tid,
@@ -362,14 +371,15 @@ mod sqlite_impl {
         let url = format!("sqlite://{}", path);
         let pool = SqlitePool::connect(&url).await.map_err(|e| e.to_string())?;
 
-        let rows = sqlx::query!("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
-            .fetch_all(&pool).await.map_err(|e| e.to_string())?;
+        use sqlx::Row;
+        let rows = sqlx::query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+            .fetch_all(&pool).await.map_err(|e: sqlx::Error| e.to_string())?;
 
         let colors = table_colors();
         let mut tables: Vec<SchemaTable> = Vec::new();
 
         for (i, row) in rows.iter().enumerate() {
-            let table_name = &row.name;
+            let table_name: String = row.try_get("name").map_err(|e| e.to_string())?;
             let pragma = sqlx::query(&format!("PRAGMA table_info(\"{}\")", table_name))
                 .fetch_all(&pool).await.map_err(|e| e.to_string())?;
 
