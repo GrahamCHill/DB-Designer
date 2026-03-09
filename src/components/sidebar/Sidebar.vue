@@ -3,7 +3,7 @@
     <!-- Brand -->
     <div class="brand">
       <span class="brand-icon">⬡</span>
-      <span class="brand-name">DB Modeler</span>
+      <span class="brand-name">DB Designer</span>
       <span class="brand-version">v2</span>
     </div>
 
@@ -367,7 +367,7 @@ function confirmDeleteGroup() {
 }
 
 function openDBConnect() {
-  ;(window as any).__dbModelerShowConnect?.()
+  ;(window as any).__dbDesignerShowConnect?.()
 }
 
 function loadFile(e: Event) {

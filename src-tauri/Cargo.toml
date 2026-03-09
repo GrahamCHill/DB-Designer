@@ -1,12 +1,12 @@
 [package]
-name = "db-modeler"
+name = "db-designer"
 version = "0.1.0"
 description = "DB Designer — visual database schema designer"
 authors = ["Graham Hill"]
 edition = "2021"
 
 [lib]
-name = "db_modeler_lib"
+name = "db_designer_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

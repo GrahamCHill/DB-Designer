@@ -38,7 +38,7 @@ const editingTable = computed(() =>
 )
 
 // Expose showDBConnect globally so Sidebar can trigger it
-;(window as any).__dbModelerShowConnect = () => { showDBConnect.value = true }
+;(window as any).__dbDesignerShowConnect = () => { showDBConnect.value = true }
 </script>
 
 <style>
