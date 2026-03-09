@@ -163,34 +163,77 @@ import { useQueryStore } from './stores/query'
 const queryStore = useQueryStore()
 
 async function exportPng(format: 'png' | 'jpg') {
-  // Load html2canvas via script tag (works in Tauri + browser)
+  // Load html2canvas via script tag
   await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js')
   const h2c = (window as any).html2canvas
   if (!h2c) { alert('Could not load html2canvas'); return }
 
   const isQuery = workspaceStore.active === 'query'
-  const canvasId = isQuery ? '#query-canvas-area' : '#db-canvas-area'
+  const isApi   = workspaceStore.active === 'api'
+  
+  // Choose the element to capture. We capture the .canvas-content which holds the actual objects.
+  let canvasId = '#db-canvas-area'
+  if (isQuery) canvasId = '#query-canvas-area'
+  if (isApi)   canvasId = '.api-canvas-container'
+  
   const el = document.querySelector(`${canvasId} .canvas-content, ${canvasId} .qcanvas-content`) as HTMLElement
   if (!el) { alert('Canvas not found'); return }
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
 
+  // 1. Calculate bounding box of ALL content
   if (isQuery) {
     if (queryStore.tables.length === 0) { alert('Canvas is empty'); return }
     queryStore.tables.forEach(t => {
-      const w = t.width || 200
-      const h = 40 + (t.columns.length * 28) + 20
+      const w = t.width || 220
+      const h = 44 + (t.columns.length * 32) + 32 // Approximate for QueryTableNode
+      minX = Math.min(minX, t.position.x)
+      minY = Math.min(minY, t.position.y)
+      maxX = Math.max(maxX, t.position.x + w)
+      maxY = Math.max(maxY, t.position.y + h)
+    })
+    // Also consider QuerySummaryNode if it exists on canvas
+    const summary = document.querySelector('.query-summary-node') as HTMLElement
+    if (summary) {
+      const x = parseInt(summary.style.left) || 0
+      const y = parseInt(summary.style.top) || 0
+      const w = summary.offsetWidth || 350
+      const h = summary.offsetHeight || 200
+      minX = Math.min(minX, x)
+      minY = Math.min(minY, y)
+      maxX = Math.max(maxX, x + w)
+      maxY = Math.max(maxY, y + h)
+    }
+  } else if (isApi) {
+    const apiStore = (window as any).apiStore || (await import('./stores/api')).useApiStore()
+    const nodes = apiStore.mode === 'rest' ? apiStore.restNodes : 
+                 apiStore.mode === 'graphql' ? apiStore.gqlNodes : apiStore.fedNodes
+    
+    if (nodes.length === 0) { alert('Canvas is empty'); return }
+    nodes.forEach((n: any) => {
+      const w = n.width || 250
+      const h = 200 // Node heights vary, but 200 is a safe min
+      minX = Math.min(minX, n.position.x)
+      minY = Math.min(minY, n.position.y)
+      maxX = Math.max(maxX, n.position.x + w)
+      maxY = Math.max(maxY, n.position.y + h)
+    })
+    // If background ERD is visible, we should probably include it too
+    store.schema.tables.forEach(t => {
+      const w = t.width || 320
+      const h = TABLE_HEADER_H + TABLE_COL_PAD_TOP + (t.columns.length * TABLE_ROW_H) + 20
       minX = Math.min(minX, t.position.x)
       minY = Math.min(minY, t.position.y)
       maxX = Math.max(maxX, t.position.x + w)
       maxY = Math.max(maxY, t.position.y + h)
     })
   } else {
+    // DB Schema
     const s = store.schema
     if (s.tables.length === 0 && s.groups.length === 0) { alert('Canvas is empty'); return }
     s.tables.forEach(t => {
       const w = t.width || 320
-      const h = TABLE_HEADER_H + TABLE_COL_PAD_TOP + (t.columns.length * TABLE_ROW_H) + 10
+      const h = TABLE_HEADER_H + TABLE_COL_PAD_TOP + (t.columns.length * TABLE_ROW_H) + 20
       minX = Math.min(minX, t.position.x)
       minY = Math.min(minY, t.position.y)
       maxX = Math.max(maxX, t.position.x + w)
@@ -204,37 +247,47 @@ async function exportPng(format: 'png' | 'jpg') {
     })
   }
 
-  // Add some padding
-  const padding = 60
-  minX -= padding
-  minY -= padding
-  maxX += padding
-  maxY += padding
+  // 2. Add padding and ensure finite bounds
+  const padding = 80
+  if (minX === Infinity) { minX = 0; minY = 0; maxX = 800; maxY = 600 }
+  else {
+    minX -= padding; minY -= padding; maxX += padding; maxY += padding
+  }
 
   const width = maxX - minX
   const height = maxY - minY
 
-  // 2. Use html2canvas
+  // 3. Render high-res image
+  // To avoid issues with current zoom/pan, we temporarily reset transform or use scrollX/Y
+  // html2canvas works best if we tell it exactly which part of the element to capture.
   const canvas = await h2c(el, {
     backgroundColor: '#0f0f12',
-    scale: 2,
+    scale: 8, // High resolution (increased to 8 for 4x more pixels)
     useCORS: true,
     logging: false,
     x: minX,
     y: minY,
     width: width,
     height: height,
-    scrollX: 0,
-    scrollY: 0,
+    scrollX: -window.scrollX, // Ensure viewport doesn't interfere
+    scrollY: -window.scrollY,
     windowWidth: el.scrollWidth,
-    windowHeight: el.scrollHeight
+    windowHeight: el.scrollHeight,
+    onclone: (clonedDoc: Document) => {
+      // Reset transform on the cloned element so capture is 1:1 with coordinates
+      const clonedEl = clonedDoc.querySelector(`${canvasId} .canvas-content, ${canvasId} .qcanvas-content`) as HTMLElement
+      if (clonedEl) {
+        clonedEl.style.transform = 'none'
+        clonedEl.style.transformOrigin = '0 0'
+      }
+    }
   })
 
-  const fileName = isQuery ? 'query' : (store.schema.name || 'schema')
+  const fileName = isQuery ? 'query' : (isApi ? 'api' : (store.schema.name || 'schema'))
   const link = document.createElement('a')
   link.download = `${fileName}.${format}`
   link.href = format === 'jpg'
-    ? canvas.toDataURL('image/jpeg', 0.92)
+    ? canvas.toDataURL('image/jpeg', 0.95)
     : canvas.toDataURL('image/png')
   link.click()
 }
