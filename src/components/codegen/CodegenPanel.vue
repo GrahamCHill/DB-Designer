@@ -93,12 +93,6 @@
             <div v-if="!activeTables.length" class="tbl-empty">Load a schema first</div>
           </div>
         </div>
-
-        <!-- Actions -->
-        <div class="cg-section">
-          <button class="btn-copy" @click="copyAll">{{ copied ? '✓ Copied' : '⎘ Copy All' }}</button>
-          <button class="btn-download" @click="downloadAll">⤓ Download</button>
-        </div>
       </div>
     </aside>
 
@@ -651,6 +645,8 @@ function downloadAll() {
   a.download = `models.${ext}`
   a.click()
 }
+
+defineExpose({ copyAll, downloadAll })
 </script>
 
 <style scoped>
@@ -742,6 +738,7 @@ function downloadAll() {
   font-family: 'JetBrains Mono', monospace; font-weight: 600; border: none; margin-bottom: 5px;
   transition: all 0.15s;
 }
+
 .btn-copy     { background: #3ECF8E20; color: #3ECF8E; border: 1px solid #3ECF8E40; }
 .btn-copy:hover { background: #3ECF8E30; }
 .btn-download { background: #1e1e28; color: #666; border: 1px solid #252535; }
@@ -766,7 +763,7 @@ function downloadAll() {
 .preview-lang-badge {
   font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
   color: #3ECF8E; background: #3ECF8E15; border: 1px solid #3ECF8E30;
-  padding: 2px 8px; border-radius: 10px; flex-shrink: 0; margin-left: 10px;
+  padding: 2px 8px; border-radius: 10px; flex-shrink: 0;
 }
 
 .preview-body {

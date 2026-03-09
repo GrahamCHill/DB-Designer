@@ -42,6 +42,12 @@
         <button
           v-if="workspaceStore.active === 'query'"
           class="ws-action-btn"
+          title="Export query canvas as JPG"
+          @click="exportPng('jpg')"
+        >⤓ JPG</button>
+        <button
+          v-if="workspaceStore.active === 'query'"
+          class="ws-action-btn"
           title="Reset SQL preview to generated SQL"
           @click="resetQuerySql"
         >Reset</button>
@@ -57,6 +63,18 @@
           title="Export SQL file"
           @click="exportQuerySQL"
         >⤓ .sql Export</button>
+        <button
+          v-if="workspaceStore.active === 'codegen'"
+          class="ws-action-btn"
+          :title="codegenCopied ? 'Copied!' : 'Copy all generated code'"
+          @click="copyCodegenAll"
+        >{{ codegenCopied ? 'Copied' : 'Copy All' }}</button>
+        <button
+          v-if="workspaceStore.active === 'codegen'"
+          class="ws-action-btn"
+          title="Download generated code"
+          @click="downloadCodegenAll"
+        >⤓ Download</button>
       </div>
     </div>
 
@@ -105,7 +123,7 @@
 
       <!-- ERD to Code -->
       <div v-show="workspaceStore.active === 'codegen'" class="ws-pane">
-        <CodegenPanel />
+        <CodegenPanel ref="codegenPanel" />
       </div>
 
     </div>
@@ -138,6 +156,7 @@ const workspaces: { id: Workspace; label: string; icon: string }[] = [
 import { useApiStore } from './stores/api'
 const apiStore = useApiStore()
 const queryCopied = ref(false)
+const codegenCopied = ref(false)
 
 function switchWorkspace(ws: Workspace) {
   workspaceStore.setWorkspace(ws)
@@ -169,6 +188,19 @@ function exportQuerySQL() {
   URL.revokeObjectURL(url)
 }
 
+async function copyCodegenAll() {
+  if (!codegenPanel.value) return
+  await codegenPanel.value.copyAll()
+  codegenCopied.value = true
+  window.setTimeout(() => {
+    codegenCopied.value = false
+  }, 2000)
+}
+
+function downloadCodegenAll() {
+  codegenPanel.value?.downloadAll()
+}
+
 watch(() => workspaceStore.active, () => {}, { immediate: true })
 
 import { useSchemaStore }    from './stores/schema'
@@ -188,9 +220,15 @@ import QuerySidebar          from './components/query-sidebar/QuerySidebar.vue'
 import QueryCanvas           from './components/query-canvas/QueryCanvas.vue'
 import CodegenPanel          from './components/codegen/CodegenPanel.vue'
 
+type CodegenPanelExposed = {
+  copyAll: () => Promise<void>
+  downloadAll: () => void
+}
+
 const store = useSchemaStore()
 const showDBConnect = ref(false)
 const editingTable  = computed(() => store.schema.tables.find(t => t.id === store.editingTableId) ?? null)
+const codegenPanel = ref<CodegenPanelExposed | null>(null)
 ;(window as any).__dbDesignerShowConnect = () => { showDBConnect.value = true }
 
 // ── PNG / JPG export ──────────────────────────────────────────────────────────
@@ -206,12 +244,16 @@ async function exportPng(format: 'png' | 'jpg') {
   const isQuery = workspaceStore.active === 'query'
   const isApi   = workspaceStore.active === 'api'
   
-  // Choose the element to capture. We capture the .canvas-content which holds the actual objects.
+  // Choose the element to capture. Query mode uses the full stage because it has multiple content layers.
   let canvasId = '#db-canvas-area'
   if (isQuery) canvasId = '#query-canvas-area'
   if (isApi)   canvasId = '.api-canvas-container'
   
-  const el = document.querySelector(`${canvasId} .canvas-content, ${canvasId} .qcanvas-content`) as HTMLElement
+  const captureSelector = isQuery
+    ? `${canvasId} .qcanvas-stage`
+    : `${canvasId} .canvas-content, ${canvasId} .qcanvas-content`
+
+  const el = document.querySelector(captureSelector) as HTMLElement
   if (!el) { alert('Canvas not found'); return }
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
@@ -310,10 +352,19 @@ async function exportPng(format: 'png' | 'jpg') {
     windowHeight: el.scrollHeight,
     onclone: (clonedDoc: Document) => {
       // Reset transform on the cloned element so capture is 1:1 with coordinates
-      const clonedEl = clonedDoc.querySelector(`${canvasId} .canvas-content, ${canvasId} .qcanvas-content`) as HTMLElement
-      if (clonedEl) {
-        clonedEl.style.transform = 'none'
-        clonedEl.style.transformOrigin = '0 0'
+      if (isQuery) {
+        const clonedLayers = clonedDoc.querySelectorAll(`${canvasId} .qcanvas-content`)
+        clonedLayers.forEach((layer) => {
+          const el = layer as HTMLElement
+          el.style.transform = 'none'
+          el.style.transformOrigin = '0 0'
+        })
+      } else {
+        const clonedEl = clonedDoc.querySelector(`${canvasId} .canvas-content, ${canvasId} .qcanvas-content`) as HTMLElement
+        if (clonedEl) {
+          clonedEl.style.transform = 'none'
+          clonedEl.style.transformOrigin = '0 0'
+        }
       }
     }
   })
@@ -403,6 +454,8 @@ body { font-family: 'JetBrains Mono','Fira Code',monospace; background: #0f0f12;
   z-index: 1;
 }
 </style>
+
+
 
 
 
