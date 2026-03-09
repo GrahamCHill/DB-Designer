@@ -8,6 +8,7 @@
       width: group.size.w + 'px',
       height: group.size.h + 'px',
       '--group-color': group.color,
+      '--group-color-rgb': hexToRgb(group.color),
       '--nest-depth': depth,
     }"
     @click.stop="$emit('select')"
@@ -48,6 +49,14 @@ defineEmits<{
   'mousedown-header': [e: MouseEvent]
   'mousedown-resize': [e: MouseEvent]
 }>()
+
+function hexToRgb(hex: string): string {
+  if (!hex) return '62, 207, 142'
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `${r}, ${g}, ${b}`
+}
 </script>
 
 <style scoped>
@@ -57,20 +66,20 @@ defineEmits<{
   pointer-events: none;
   transition: box-shadow 0.2s;
   /* depth 0 = solid border; deeper = dashed */
-  border: 1.5px solid color-mix(in srgb, var(--group-color, #3ECF8E) 35%, transparent);
+  border: 1.5px solid rgba(var(--group-color-rgb, 62, 207, 142), 0.35);
   border-style: solid;
-  background: color-mix(in srgb, var(--group-color, #3ECF8E) 2%, transparent);
+  background: rgba(var(--group-color-rgb, 62, 207, 142), 0.02);
 }
 
 .group-node.nested {
   border-style: dashed;
-  background: color-mix(in srgb, var(--group-color, #3ECF8E) 4%, transparent);
+  background: rgba(var(--group-color-rgb, 62, 207, 142), 0.04);
 }
 
 .group-node.selected {
   box-shadow:
     0 0 0 2px var(--group-color),
-    0 0 24px color-mix(in srgb, var(--group-color) 20%, transparent);
+    0 0 24px rgba(var(--group-color-rgb, 62, 207, 142), 0.2);
 }
 
 /* Header */
@@ -82,8 +91,8 @@ defineEmits<{
   cursor: grab;
   pointer-events: all;
   border-radius: 10px 10px 0 0;
-  background: color-mix(in srgb, var(--group-color, #3ECF8E) 7%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--group-color, #3ECF8E) 18%, transparent);
+  background: rgba(var(--group-color-rgb, 62, 207, 142), 0.07);
+  border-bottom: 1px solid rgba(var(--group-color-rgb, 62, 207, 142), 0.18);
   user-select: none;
 }
 .group-header:active { cursor: grabbing; }
@@ -114,7 +123,7 @@ defineEmits<{
   font-weight: 700;
   color: var(--group-color);
   opacity: 0.5;
-  background: color-mix(in srgb, var(--group-color) 15%, transparent);
+  background: rgba(var(--group-color-rgb, 62, 207, 142), 0.15);
   border-radius: 3px;
   padding: 1px 4px;
   flex-shrink: 0;
@@ -134,7 +143,7 @@ defineEmits<{
   transition: opacity 0.15s, background 0.15s;
 }
 .group-header:hover .group-edit-btn { opacity: 0.7; }
-.group-edit-btn:hover { opacity: 1 !important; background: color-mix(in srgb, var(--group-color) 20%, transparent); }
+.group-edit-btn:hover { opacity: 1 !important; background: rgba(var(--group-color-rgb, 62, 207, 142), 0.2); }
 
 /* Resize handle */
 .resize-handle {

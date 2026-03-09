@@ -44,7 +44,7 @@
             active:   store.selectedGroupId === group.id,
             'drop-target': dragOverGroupId === group.id,
           }"
-          :style="dragOverGroupId === group.id ? { '--g-color': group.color } : {}"
+          :style="dragOverGroupId === group.id ? { '--g-color': group.color, '--g-color-rgb': hexToRgb(group.color) } : {}"
           @click="store.selectedGroupId = group.id; store.selectedTableId = null"
           @dblclick="store.editingGroupId = group.id"
           @dragover.prevent="onGroupDragOver(group.id)"
@@ -239,6 +239,14 @@ const showExport = ref(false)
 // ── Drag state ────────────────────────────────────────────────────────────────
 
 /** Table ID currently being dragged in the sidebar */
+function hexToRgb(hex: string): string {
+  if (!hex || hex[0] !== '#') return '62, 207, 142'
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `${r}, ${g}, ${b}`
+}
+
 const draggingTableId = ref<string | null>(null)
 /** Group ID the drag is currently hovering over ('__none__' = ungroup zone) */
 const dragOverGroupId = ref<string | null>(null)
@@ -476,8 +484,8 @@ function loadFile(e: Event) {
 
 /* Group drop targets */
 .group-item.drop-target {
-  background: color-mix(in srgb, var(--g-color, #3ECF8E) 12%, transparent) !important;
-  border: 1px dashed color-mix(in srgb, var(--g-color, #3ECF8E) 50%, transparent);
+  background: rgba(var(--g-color-rgb, 62, 207, 142), 0.12) !important;
+  border: 1px dashed rgba(var(--g-color-rgb, 62, 207, 142), 0.5);
   border-radius: 5px;
 }
 .ungroup-zone.drop-target {

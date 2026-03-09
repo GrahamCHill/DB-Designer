@@ -72,13 +72,15 @@
         :drawing-rel="!!drawingRel"
         :connected-as-source="sourceColsByTable.get(table.id) ?? emptySet"
         :connected-as-target="targetColsByTable.get(table.id) ?? emptySet"
-        @mousedown.stop="startTableDrag(table.id, $event)"
+        :read-only="readOnly && !interactive"
+        @mousedown.stop="!readOnly && startTableDrag(table.id, $event)"
         @select="selectTable(table.id)"
-        @start-relation="startRelation(table.id, $event)"
-        @end-relation="endRelation(table.id, $event)"
-        @edit="store.editingTableId = table.id"
-        @delete="store.deleteTable(table.id)"
-        @resize-start="startTableResize(table.id, $event)"
+        @start-relation="!readOnly && startRelation(table.id, $event)"
+        @end-relation="!readOnly && endRelation(table.id, $event)"
+        @edit="!readOnly && (store.editingTableId = table.id)"
+        @delete="!readOnly && store.deleteTable(table.id)"
+        @resize-start="!readOnly && startTableResize(table.id, $event)"
+        @generate-api="$emit('generate-api', $event)"
       />
     </div>
 
@@ -132,11 +134,20 @@ import type { Relation, RelationType } from '../../types'
 import { TABLE_WIDTH, TABLE_HEADER_H, TABLE_COL_PAD_TOP, TABLE_ROW_H } from '../../types'
 import { getDescendants } from '../../composables/useContainment'
 
+const props = defineProps<{
+  readOnly?: boolean
+  interactive?: boolean
+}>()
+
 const store = useSchemaStore()
 const emptySet = new Set<string>()  // stable empty set so Vue doesn't re-render every frame
 const canvasEl = ref<HTMLDivElement>()
 const canvasW  = ref(800)
 const canvasH  = ref(600)
+
+const emit = defineEmits<{
+  'generate-api': [table: any]
+}>()
 
 onMounted(() => {
   // Delete key removes selected table or relation

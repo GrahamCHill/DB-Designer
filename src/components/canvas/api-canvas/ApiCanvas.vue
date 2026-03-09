@@ -1,0 +1,679 @@
+<template>
+  <div
+    class="canvas-root"
+    ref="canvasEl"
+    @mousedown="onCanvasMouseDown"
+    @mousemove="onMouseMove"
+    @mouseup="onMouseUp"
+    @mouseleave="onMouseUp"
+    @wheel.prevent="onWheel"
+    @contextmenu.prevent
+  >
+    <div class="canvas-content" :style="contentStyle">
+
+      <!-- ── FEDERATION: services rendered behind nodes ── -->
+      <template v-if="store.mode === 'federation'">
+        <ServiceNode
+          v-for="svc in store.fedServices"
+          :key="svc.id"
+          :service="svc"
+          :selected="store.selectedServiceId === svc.id"
+          :type-count="fedTypeCountFor(svc.id)"
+          @mousedown-header="startServiceDrag(svc.id, $event)"
+          @mousedown-resize="startServiceResize(svc.id, $event)"
+          @select="store.selectedServiceId = svc.id; store.selectedNodeId = null"
+          @edit="store.editingServiceId = svc.id"
+          @delete="store.deleteService(svc.id)"
+        />
+      </template>
+
+      <!-- ── RELATIONS SVG ── -->
+      <svg class="relations-svg" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow-end" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#3ECF8E" opacity="0.9" />
+          </marker>
+          <marker id="arrow-fed" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#F59E0B" opacity="0.9" />
+          </marker>
+        </defs>
+
+        <!-- REST relations -->
+        <template v-if="store.mode === 'rest'">
+          <g v-for="rel in store.restRelations" :key="rel.id">
+            <path :d="restRelPath(rel)" fill="none"
+              :stroke="store.selectedRelId === rel.id ? '#3ECF8E' : '#3ECF8E45'"
+              :stroke-width="store.selectedRelId === rel.id ? 2 : 1.5"
+              stroke-dasharray="5,3" marker-end="url(#arrow-end)" pointer-events="none" />
+            <path :d="restRelPath(rel)" fill="none" stroke="transparent" stroke-width="14"
+              class="rel-hit" @click.stop="store.selectedRelId = rel.id" />
+          </g>
+        </template>
+
+        <!-- GQL relations -->
+        <template v-if="store.mode === 'graphql'">
+          <g v-for="rel in store.gqlRelations" :key="rel.id">
+            <path :d="gqlRelPath(rel)" fill="none"
+              :stroke="store.selectedRelId === rel.id ? '#3B82F6' : '#3B82F645'"
+              :stroke-width="store.selectedRelId === rel.id ? 2 : 1.5"
+              :stroke-dasharray="rel.kind === 'implements' ? '3,3' : '5,3'"
+              marker-end="url(#arrow-end)" pointer-events="none" />
+            <path :d="gqlRelPath(rel)" fill="none" stroke="transparent" stroke-width="14"
+              class="rel-hit" @click.stop="store.selectedRelId = rel.id" />
+            <text v-if="rel.label" :x="gqlRelMidX(rel)" :y="gqlRelMidY(rel)"
+              class="rel-label" fill="#3B82F680">{{ rel.label }}</text>
+          </g>
+        </template>
+
+        <!-- Federation relations -->
+        <template v-if="store.mode === 'federation'">
+          <g v-for="rel in store.fedRelations" :key="rel.id">
+            <path :d="fedRelPath(rel)" fill="none"
+              :stroke="store.selectedRelId === rel.id ? '#F59E0B' : '#F59E0B55'"
+              :stroke-width="store.selectedRelId === rel.id ? 2.5 : 1.5"
+              stroke-dasharray="6,3" marker-end="url(#arrow-fed)" pointer-events="none" />
+            <path :d="fedRelPath(rel)" fill="none" stroke="transparent" stroke-width="14"
+              class="rel-hit" @click.stop="store.selectedRelId = rel.id" />
+          </g>
+        </template>
+
+        <!-- In-progress relation line -->
+        <path v-if="drawingRel" :d="drawingRelPath"
+          fill="none" stroke="#3ECF8E" stroke-width="1.5"
+          stroke-dasharray="5,3" opacity="0.7" pointer-events="none" />
+      </svg>
+
+      <!-- ── REST nodes ── -->
+      <template v-if="store.mode === 'rest'">
+        <template v-for="node in store.restNodes" :key="node.id">
+          <EndpointNode
+            v-if="node.kind === 'endpoint'"
+            v-bind="restNodeProps(node)"
+            @mousedown.stop="startNodeDrag(node.id, 'rest', $event)"
+            @select="selectNode(node.id)"
+            @edit="store.editingNodeId = node.id"
+            @delete="store.deleteRestNode(node.id)"
+            @start-relation="startRelation(node.id, 'right', $event)"
+            @end-relation="endRelation(node.id, $event)"
+            @resize-start="startNodeResize(node.id, 'rest', node.width, $event)"
+          />
+          <RestTypeNode
+            v-else-if="node.kind === 'type'"
+            :node="(node as any)"
+            :selected="store.selectedNodeId === node.id"
+            :highlighted="highlightedIds.has(node.id)"
+            :connected-fields="restConnectedFields.get(node.id) ?? emptySet"
+            @mousedown.stop="startNodeDrag(node.id, 'rest', $event)"
+            @select="selectNode(node.id)"
+            @edit="store.editingNodeId = node.id"
+            @delete="store.deleteRestNode(node.id)"
+            @start-relation="startRelation(node.id, 'right', $event)"
+            @end-relation="endRelation(node.id, $event)"
+            @resize-start="startNodeResize(node.id, 'rest', node.width, $event)"
+          />
+        </template>
+      </template>
+
+      <!-- ── GQL nodes ── -->
+      <template v-if="store.mode === 'graphql'">
+        <GqlTypeNode
+          v-for="node in store.gqlNodes"
+          :key="node.id"
+          :node="node"
+          :selected="store.selectedNodeId === node.id"
+          :highlighted="highlightedIds.has(node.id)"
+          :connected-as-source="gqlSourceCols.get(node.id) ?? emptySet"
+          :connected-as-target="gqlTargetCols.get(node.id) ?? emptySet"
+          @mousedown.stop="startNodeDrag(node.id, 'graphql', $event)"
+          @select="selectNode(node.id)"
+          @edit="store.editingNodeId = node.id"
+          @delete="store.deleteGqlNode(node.id)"
+          @start-relation="startRelation(node.id, 'right', $event)"
+          @end-relation="endRelation(node.id, $event)"
+          @resize-start="startNodeResize(node.id, 'graphql', node.width, $event)"
+        />
+      </template>
+
+      <!-- ── Federation nodes ── -->
+      <template v-if="store.mode === 'federation'">
+        <FedTypeNode
+          v-for="node in store.fedNodes"
+          :key="node.id"
+          :node="node"
+          :selected="store.selectedNodeId === node.id"
+          :highlighted="highlightedIds.has(node.id)"
+          :connected-as-source="fedSourceCols.get(node.id) ?? emptySet"
+          :connected-as-target="fedTargetCols.get(node.id) ?? emptySet"
+          :services="store.fedServices"
+          @mousedown.stop="startNodeDrag(node.id, 'federation', $event)"
+          @select="selectNode(node.id)"
+          @edit="store.editingNodeId = node.id"
+          @delete="store.deleteFedNode(node.id)"
+          @start-relation="startRelation(node.id, 'right', $event)"
+          @end-relation="endRelation(node.id, $event)"
+          @resize-start="startNodeResize(node.id, 'federation', node.width, $event)"
+        />
+      </template>
+    </div>
+
+    <!-- Empty state -->
+    <div v-if="isEmpty" class="empty-state">
+      <div class="empty-icon">⬡</div>
+      <p>Canvas is empty</p>
+      <span>Use the sidebar to add {{ modeLabel }}</span>
+    </div>
+
+    <!-- Zoom controls -->
+    <div class="zoom-controls">
+      <button @click="adjustZoom(0.1)">+</button>
+      <span>{{ Math.round(zoom * 100) }}%</span>
+      <button @click="adjustZoom(-0.1)">−</button>
+      <button @click="resetView" title="Reset view">⊙</button>
+    </div>
+
+    <!-- Delete/relation bar -->
+    <div v-if="store.selectedRelId" class="rel-bar">
+      <span class="rel-bar-label">Relation selected</span>
+      <button class="rel-bar-del" @click="deleteSelectedRel">✕ Delete</button>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, reactive, onMounted } from 'vue'
+import { useApiStore } from '../../../stores/api'
+import EndpointNode from './EndpointNode.vue'
+import RestTypeNode from './RestTypeNode.vue'
+import GqlTypeNode  from './GqlTypeNode.vue'
+import FedTypeNode  from './FedTypeNode.vue'
+import ServiceNode  from './ServiceNode.vue'
+import type { RestRelation, GqlRelation, FedRelation, RestNode } from '../../../types/api'
+import { NODE_DEFAULT_WIDTH, NODE_HEADER_H, NODE_FIELD_H } from '../../../types/api'
+
+const store = useApiStore()
+const emptySet = new Set<string>()
+
+const canvasEl = ref<HTMLDivElement>()
+const zoom = ref(1)
+const pan  = reactive({ x: 40, y: 40 })
+
+const contentStyle = computed(() => ({
+  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom.value})`,
+  transformOrigin: '0 0',
+}))
+
+const modeLabel = computed(() =>
+  store.mode === 'rest' ? 'endpoints or types'
+  : store.mode === 'graphql' ? 'GraphQL types'
+  : 'services and types'
+)
+
+const isEmpty = computed(() => {
+  if (store.mode === 'rest')       return store.restNodes.length === 0
+  if (store.mode === 'graphql')    return store.gqlNodes.length === 0
+  return store.fedNodes.length === 0 && store.fedServices.length === 0
+})
+
+// ── Drag types ────────────────────────────────────────────────────────────────
+
+type DragMode = 'rest' | 'graphql' | 'federation'
+
+type NodeDrag    = { kind: 'node';    id: string; mode: DragMode; origX: number; origY: number }
+type NodeResize  = { kind: 'n-resize'; id: string; mode: DragMode; origW: number }
+type ServiceDrag = { kind: 'service'; id: string; origX: number; origY: number }
+type SvcResize   = { kind: 's-resize'; id: string; origW: number; origH: number }
+type PanDrag     = { kind: 'pan' }
+
+type AnyDrag = (NodeDrag | NodeResize | ServiceDrag | SvcResize | PanDrag) & {
+  startClientX: number; startClientY: number
+}
+
+const drag = ref<AnyDrag | null>(null)
+
+// ── Relation drawing ──────────────────────────────────────────────────────────
+
+const drawingRel = ref<{
+  fromNodeId: string; fromFieldId: string
+  mouseX: number; mouseY: number
+} | null>(null)
+
+// ── Viewport helpers ──────────────────────────────────────────────────────────
+
+function toCanvas(cx: number, cy: number) {
+  const r = canvasEl.value!.getBoundingClientRect()
+  return { x: (cx - r.left - pan.x) / zoom.value, y: (cy - r.top - pan.y) / zoom.value }
+}
+
+function adjustZoom(delta: number) {
+  zoom.value = Math.min(3, Math.max(0.15, zoom.value + delta))
+}
+
+function resetView() { zoom.value = 1; pan.x = 40; pan.y = 40 }
+
+function onWheel(e: WheelEvent) {
+  const delta = e.deltaY > 0 ? -0.08 : 0.08
+  adjustZoom(delta)
+}
+
+// ── Node geometry ─────────────────────────────────────────────────────────────
+
+function nodeRight(nodeId: string): { x: number; y: number; fieldY: (fid: string) => number } {
+  const n = allNodes.value.find(n => n.id === nodeId)
+  if (!n) return { x: 0, y: 0, fieldY: () => 0 }
+  const w = (n as any).width ?? NODE_DEFAULT_WIDTH
+  return {
+    x: n.position.x + w,
+    y: n.position.y + NODE_HEADER_H / 2,
+    fieldY: (fid: string) => {
+      const fields = getFields(n)
+      const idx = Math.max(0, fields.indexOf(fid))
+      return n.position.y + NODE_HEADER_H + idx * NODE_FIELD_H + NODE_FIELD_H / 2
+    },
+  }
+}
+
+function nodeLeft(nodeId: string): { x: number; y: number } {
+  const n = allNodes.value.find(n => n.id === nodeId)
+  if (!n) return { x: 0, y: 0 }
+  return { x: n.position.x, y: n.position.y + NODE_HEADER_H / 2 }
+}
+
+function getFields(node: any): string[] {
+  if (!node) return []
+  const fields = node.fields ?? node.params ?? []
+  return fields.map((f: any) => f.id)
+}
+
+const allNodes = computed(() => {
+  if (store.mode === 'rest')       return store.restNodes as any[]
+  if (store.mode === 'graphql')    return store.gqlNodes  as any[]
+  return store.fedNodes as any[]
+})
+
+// ── Curve helpers ─────────────────────────────────────────────────────────────
+
+function curve(a: { x: number; y: number }, b: { x: number; y: number }) {
+  const cx = Math.max(Math.abs(b.x - a.x) * 0.5, 80)
+  return `M ${a.x} ${a.y} C ${a.x + cx} ${a.y}, ${b.x - cx} ${b.y}, ${b.x} ${b.y}`
+}
+
+// ── REST path ─────────────────────────────────────────────────────────────────
+
+function restRelPath(rel: RestRelation) {
+  const src = nodeRight(rel.sourceId)
+  const tgt = nodeLeft(rel.targetId)
+  const sy = rel.sourceFieldId ? src.fieldY(rel.sourceFieldId) : src.y
+  return curve({ x: src.x, y: sy }, tgt)
+}
+
+// ── GQL paths ─────────────────────────────────────────────────────────────────
+
+function gqlRelPath(rel: GqlRelation) {
+  const src = nodeRight(rel.sourceId)
+  const tgt = nodeLeft(rel.targetId)
+  const sy  = rel.sourceFieldId ? src.fieldY(rel.sourceFieldId) : src.y
+  return curve({ x: src.x, y: sy }, tgt)
+}
+
+function gqlRelMidX(rel: GqlRelation) {
+  const src = nodeRight(rel.sourceId)
+  const tgt = nodeLeft(rel.targetId)
+  return (src.x + tgt.x) / 2
+}
+function gqlRelMidY(rel: GqlRelation) {
+  const src = nodeRight(rel.sourceId)
+  const tgt = nodeLeft(rel.targetId)
+  return (src.y + tgt.y) / 2 - 6
+}
+
+// ── Federation paths ──────────────────────────────────────────────────────────
+
+function fedRelPath(rel: FedRelation) {
+  const src = nodeRight(rel.sourceTypeId)
+  const tgt = nodeLeft(rel.targetTypeId)
+  const sy  = rel.sourceFieldId ? src.fieldY(rel.sourceFieldId) : src.y
+  return curve({ x: src.x, y: sy }, tgt)
+}
+
+// ── In-progress relation ──────────────────────────────────────────────────────
+
+const drawingRelPath = computed(() => {
+  if (!drawingRel.value) return ''
+  const src = nodeRight(drawingRel.value.fromNodeId)
+  const sy  = drawingRel.value.fromFieldId
+    ? src.fieldY(drawingRel.value.fromFieldId)
+    : src.y
+  return curve({ x: src.x, y: sy }, { x: drawingRel.value.mouseX, y: drawingRel.value.mouseY })
+})
+
+// ── Highlight sets ────────────────────────────────────────────────────────────
+
+const highlightedIds = computed(() => {
+  if (!store.selectedRelId) return new Set<string>()
+  const rels = store.mode === 'graphql'    ? store.gqlRelations
+             : store.mode === 'federation' ? store.fedRelations
+             : store.restRelations
+  const rel = (rels as any[]).find((r: any) => r.id === store.selectedRelId)
+  if (!rel) return new Set<string>()
+  return new Set([rel.sourceId ?? rel.sourceTypeId, rel.targetId ?? rel.targetTypeId])
+})
+
+// ── Connected field sets ──────────────────────────────────────────────────────
+
+const gqlSourceCols = computed(() => {
+  const m = new Map<string, Set<string>>()
+  for (const r of store.gqlRelations) {
+    if (!m.has(r.sourceId)) m.set(r.sourceId, new Set())
+    if (r.sourceFieldId) m.get(r.sourceId)!.add(r.sourceFieldId)
+  }
+  return m
+})
+
+const gqlTargetCols = computed(() => {
+  const m = new Map<string, Set<string>>()
+  for (const r of store.gqlRelations) {
+    if (!m.has(r.targetId)) m.set(r.targetId, new Set())
+    if (r.sourceFieldId) m.get(r.targetId)!.add(r.sourceFieldId)
+  }
+  return m
+})
+
+const fedSourceCols = computed(() => {
+  const m = new Map<string, Set<string>>()
+  for (const r of store.fedRelations) {
+    if (!m.has(r.sourceTypeId)) m.set(r.sourceTypeId, new Set())
+    if (r.sourceFieldId) m.get(r.sourceTypeId)!.add(r.sourceFieldId)
+  }
+  return m
+})
+
+const fedTargetCols = computed(() => {
+  const m = new Map<string, Set<string>>()
+  for (const r of store.fedRelations) {
+    if (!m.has(r.targetTypeId)) m.set(r.targetTypeId, new Set())
+    if (r.sourceFieldId) m.get(r.targetTypeId)!.add(r.sourceFieldId)
+  }
+  return m
+})
+
+const restConnectedFields = computed(() => {
+  const m = new Map<string, Set<string>>()
+  for (const r of store.restRelations) {
+    if (!m.has(r.sourceId)) m.set(r.sourceId, new Set())
+    m.get(r.sourceId)!.add(r.sourceFieldId)
+    
+    if (!m.has(r.targetId)) m.set(r.targetId, new Set())
+    m.get(r.targetId)!.add(r.targetFieldId)
+  }
+  return m
+})
+
+// ── REST node prop helper ─────────────────────────────────────────────────────
+
+function restNodeProps(node: RestNode) {
+  return {
+    node,
+    selected:        store.selectedNodeId === node.id,
+    highlighted:     highlightedIds.value.has(node.id),
+    connectedFields: restConnectedFields.value.get(node.id) ?? emptySet,
+    allNodes:        store.restNodes.map(n => ({
+      id: n.id,
+      kind: n.kind,
+      name: n.kind === 'type' ? (n as any).name : undefined,
+      path: n.kind === 'endpoint' ? (n as any).path : undefined,
+    })),
+  }
+}
+
+function fedTypeCountFor(serviceId: string) {
+  return store.fedNodes.filter(n => n.serviceId === serviceId).length
+}
+
+// ── Mouse handlers ────────────────────────────────────────────────────────────
+
+function onCanvasMouseDown(e: MouseEvent) {
+  const target = e.target as HTMLElement
+  const isBg = target === canvasEl.value
+    || target.classList.contains('canvas-content')
+    || target.classList.contains('relations-svg')
+  if (isBg) {
+    store.clearSelection()
+    drag.value = { kind: 'pan', startClientX: e.clientX, startClientY: e.clientY }
+  }
+}
+
+function startNodeDrag(id: string, mode: DragMode, e: MouseEvent) {
+  const node = allNodeById(id)
+  if (!node) return
+  drag.value = {
+    kind: 'node', id, mode,
+    origX: node.position.x, origY: node.position.y,
+    startClientX: e.clientX, startClientY: e.clientY,
+  }
+}
+
+function startNodeResize(id: string, mode: DragMode, origW: number, e: MouseEvent) {
+  drag.value = { kind: 'n-resize', id, mode, origW, startClientX: e.clientX, startClientY: e.clientY }
+}
+
+function startServiceDrag(id: string, e: MouseEvent) {
+  const svc = store.fedServices.find(s => s.id === id)
+  if (!svc) return
+  drag.value = {
+    kind: 'service', id,
+    origX: svc.position.x, origY: svc.position.y,
+    startClientX: e.clientX, startClientY: e.clientY,
+  }
+}
+
+function startServiceResize(id: string, e: MouseEvent) {
+  const svc = store.fedServices.find(s => s.id === id)
+  if (!svc) return
+  drag.value = {
+    kind: 's-resize', id,
+    origW: svc.size.w, origH: svc.size.h,
+    startClientX: e.clientX, startClientY: e.clientY,
+  }
+}
+
+function startRelation(nodeId: string, _side: string, fieldId: string) {
+  const node = allNodeById(nodeId)
+  if (!node) return
+  const pos = toCanvas(0, 0)
+  drawingRel.value = { fromNodeId: nodeId, fromFieldId: fieldId, mouseX: pos.x, mouseY: pos.y }
+}
+
+function endRelation(nodeId: string, fieldId: string) {
+  if (!drawingRel.value || drawingRel.value.fromNodeId === nodeId) {
+    drawingRel.value = null; return
+  }
+  const from = drawingRel.value
+  drawingRel.value = null
+
+  if (store.mode === 'rest') {
+    store.addRestRelation({ kind: 'type-ref', sourceId: from.fromNodeId, targetId: nodeId, label: '' })
+  } else if (store.mode === 'graphql') {
+    store.addGqlRelation({ kind: 'field-ref', sourceId: from.fromNodeId, sourceFieldId: from.fromFieldId, targetId: nodeId, label: '' })
+  } else {
+    const srcNode = store.fedNodes.find(n => n.id === from.fromNodeId)
+    const tgtNode = store.fedNodes.find(n => n.id === nodeId)
+    if (srcNode && tgtNode) {
+      store.addFedRelation({
+        kind: 'entity-reference',
+        sourceServiceId: srcNode.serviceId, sourceTypeId: from.fromNodeId, sourceFieldId: from.fromFieldId,
+        targetServiceId: tgtNode.serviceId, targetTypeId: nodeId,
+        label: '',
+      })
+    }
+  }
+}
+
+function selectNode(id: string) {
+  store.selectedNodeId    = id
+  store.selectedRelId     = null
+  store.selectedGroupId   = null
+  store.selectedServiceId = null
+}
+
+function allNodeById(id: string) {
+  return (allNodes.value as any[]).find((n: any) => n.id === id)
+}
+
+function onMouseMove(e: MouseEvent) {
+  if (drawingRel.value) {
+    const p = toCanvas(e.clientX, e.clientY)
+    drawingRel.value.mouseX = p.x
+    drawingRel.value.mouseY = p.y
+    return
+  }
+  if (!drag.value) return
+
+  const dx = (e.clientX - drag.value.startClientX) / zoom.value
+  const dy = (e.clientY - drag.value.startClientY) / zoom.value
+  const d  = drag.value
+
+  if (d.kind === 'pan') {
+    pan.x += e.clientX - d.startClientX
+    pan.y += e.clientY - d.startClientY
+    d.startClientX = e.clientX
+    d.startClientY = e.clientY
+
+  } else if (d.kind === 'node') {
+    const pos = { x: d.origX + dx, y: d.origY + dy }
+    if (d.mode === 'rest')       store.updateRestNodePosition(d.id, pos)
+    if (d.mode === 'graphql')    store.updateGqlNodePosition(d.id, pos)
+    if (d.mode === 'federation') store.updateFedNodePosition(d.id, pos)
+
+  } else if (d.kind === 'n-resize') {
+    const w = Math.max(260, d.origW + dx)
+    if (d.mode === 'rest')       store.updateRestNodeWidth(d.id, w)
+    if (d.mode === 'graphql')    store.updateGqlNodeWidth(d.id, w)
+    if (d.mode === 'federation') store.updateFedNodeWidth(d.id, w)
+
+  } else if (d.kind === 'service') {
+    store.updateServicePosition(d.id, { x: d.origX + dx, y: d.origY + dy })
+
+  } else if (d.kind === 's-resize') {
+    store.updateServiceSize(d.id, {
+      w: Math.max(300, d.origW + dx),
+      h: Math.max(200, d.origH + dy),
+    })
+  }
+}
+
+function onMouseUp() {
+  if (!drag.value) return
+  const d = drag.value
+  drag.value = null
+
+  if (d.kind === 'node') {
+    if (d.mode === 'rest')       store.commitRestNodePosition(d.id)
+    if (d.mode === 'graphql')    store.commitGqlNodePosition(d.id)
+    if (d.mode === 'federation') store.commitFedNodePosition(d.id)
+  } else if (d.kind === 'n-resize') {
+    if (d.mode === 'rest')       store.commitRestNodeWidth(d.id)
+    if (d.mode === 'graphql')    store.commitGqlNodeWidth(d.id)
+    if (d.mode === 'federation') store.commitFedNodeWidth(d.id)
+  }
+  // service drag & resize persist live via store methods
+  if (drawingRel.value && !drag.value) {
+    // cancelled mid-air
+    drawingRel.value = null
+  }
+}
+
+function deleteSelectedRel() {
+  if (!store.selectedRelId) return
+  if (store.mode === 'rest')       store.deleteRestRelation(store.selectedRelId)
+  if (store.mode === 'graphql')    store.deleteGqlRelation(store.selectedRelId)
+  if (store.mode === 'federation') store.deleteFedRelation(store.selectedRelId)
+}
+
+// ── Keyboard ──────────────────────────────────────────────────────────────────
+
+onMounted(() => {
+  window.addEventListener('keydown', (e: KeyboardEvent) => {
+    const tag = (e.target as HTMLElement).tagName.toLowerCase()
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+    if (e.key !== 'Delete' && e.key !== 'Backspace') return
+    e.preventDefault()
+    if (store.selectedNodeId) {
+      if (store.mode === 'rest')       store.deleteRestNode(store.selectedNodeId)
+      if (store.mode === 'graphql')    store.deleteGqlNode(store.selectedNodeId)
+      if (store.mode === 'federation') store.deleteFedNode(store.selectedNodeId)
+    } else if (store.selectedRelId) {
+      deleteSelectedRel()
+    } else if (store.selectedServiceId && store.mode === 'federation') {
+      store.deleteService(store.selectedServiceId)
+    }
+  })
+})
+</script>
+
+<style scoped>
+.canvas-root {
+  flex: 1; position: relative; overflow: hidden;
+  background: #0a0a0f;
+  background-image:
+    radial-gradient(circle, #1e1e2a 1.5px, transparent 1.5px),
+    radial-gradient(circle, #141420 1px, transparent 1px);
+  background-size: 32px 32px, 8px 8px;
+  cursor: default;
+}
+
+.canvas-content {
+  position: absolute; top: 0; left: 0;
+  width: 4000px; height: 4000px;
+  transform-origin: 0 0;
+}
+
+.relations-svg {
+  position: absolute; top: 0; left: 0;
+  width: 4000px; height: 4000px;
+  pointer-events: none; overflow: visible;
+}
+
+.rel-hit { pointer-events: stroke; cursor: pointer; }
+.rel-label { font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+
+/* Empty state */
+.empty-state {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  text-align: center; pointer-events: none;
+}
+.empty-icon { font-size: 48px; color: #1e1e28; margin-bottom: 12px; }
+.empty-state p    { font-size: 15px; color: #2a2a38; margin: 0 0 4px; font-weight: 600; }
+.empty-state span { font-size: 12px; color: #1e1e28; }
+
+/* Zoom controls */
+.zoom-controls {
+  position: absolute; bottom: 20px; right: 20px;
+  display: flex; align-items: center; gap: 4px;
+  background: #13131a; border: 1px solid #25253a;
+  border-radius: 8px; padding: 4px 6px;
+}
+.zoom-controls button {
+  background: none; border: none; color: #666; cursor: pointer;
+  font-size: 16px; width: 26px; height: 26px; border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+.zoom-controls button:hover { color: #e0e0e0; background: #1e1e28; }
+.zoom-controls span { font-size: 11px; color: #555; min-width: 36px; text-align: center;
+  font-family: 'JetBrains Mono', monospace; }
+
+/* Relation bar */
+.rel-bar {
+  position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  background: #13131a; border: 1px solid #3ECF8E40;
+  border-radius: 8px; padding: 7px 14px;
+}
+.rel-bar-label { font-size: 12px; color: #3ECF8E80; }
+.rel-bar-del {
+  background: none; border: 1px solid #EF444440; color: #EF4444;
+  border-radius: 5px; padding: 3px 10px; font-size: 11px; cursor: pointer;
+  transition: background 0.15s;
+}
+.rel-bar-del:hover { background: #EF444415; }
+</style>

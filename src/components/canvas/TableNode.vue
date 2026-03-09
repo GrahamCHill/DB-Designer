@@ -5,12 +5,15 @@
       selected,
       highlighted,
       'drawing-mode': drawingRel,
+      'read-only': readOnly,
     }"
     :style="{
       left:  table.position.x + 'px',
       top:   table.position.y + 'px',
       width: table.width + 'px',
       '--table-color': table.color,
+      '--table-color-rgb': hexToRgb(table.color),
+      '--dot-color-rgb': hexToRgb(table.color),
     }"
     @mousedown.stop="$emit('mousedown', $event)"
     @click.stop="$emit('select')"
@@ -22,8 +25,9 @@
         <span class="table-name">{{ table.name }}</span>
       </div>
       <div class="header-actions">
-        <button class="icon-btn" @click.stop="$emit('edit')"   title="Edit table">✎</button>
-        <button class="icon-btn danger" @click.stop="$emit('delete')" title="Delete table">✕</button>
+        <button v-if="!readOnly" class="icon-btn" @click.stop="$emit('edit')"   title="Edit table">✎</button>
+        <button v-if="!readOnly" class="icon-btn danger" @click.stop="$emit('delete')" title="Delete table">✕</button>
+        <button v-if="readOnly" class="icon-btn primary" @click.stop="$emit('generate-api', table)" title="Generate API for this table">⇄</button>
       </div>
     </div>
 
@@ -37,6 +41,7 @@
       >
         <!-- LEFT = input connector -->
         <div
+          v-if="!readOnly"
           class="connector connector-left"
           :class="{ connected: connectedAsTarget.has(col.id) }"
           :style="connectedAsTarget.has(col.id) ? { '--dot-color': table.color } : {}"
@@ -56,6 +61,7 @@
 
         <!-- RIGHT = output connector -->
         <div
+          v-if="!readOnly"
           class="connector connector-right"
           :class="{ connected: connectedAsSource.has(col.id) }"
           :style="connectedAsSource.has(col.id) ? { '--dot-color': table.color } : {}"
@@ -77,6 +83,7 @@
 
     <!-- Resize handle — bottom-right corner -->
     <div
+      v-if="!readOnly"
       class="resize-handle"
       title="Drag to resize"
       @mousedown.stop="$emit('resize-start', $event)"
@@ -94,6 +101,7 @@ defineProps<{
   drawingRel: boolean
   connectedAsSource: Set<string>
   connectedAsTarget: Set<string>
+  readOnly?: boolean
 }>()
 
 defineEmits<{
@@ -104,7 +112,15 @@ defineEmits<{
   'start-relation': [columnId: string]
   'end-relation':   [columnId: string]
   'resize-start':   [e: MouseEvent]
+  'generate-api':   [table: Table]
 }>()
+
+function hexToRgb(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  return `${r}, ${g}, ${b}`
+}
 </script>
 
 <style scoped>
@@ -124,14 +140,14 @@ defineEmits<{
 
 .table-node.selected {
   border-color: var(--table-color);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--table-color) 40%, transparent),
+  box-shadow: 0 0 0 2px rgba(var(--table-color-rgb, 62, 207, 142), 0.4),
               0 8px 32px #00000080;
 }
 .table-node.highlighted {
   border-color: var(--table-color);
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--table-color) 55%, transparent),
-    0 0 28px color-mix(in srgb, var(--table-color) 25%, transparent),
+    0 0 0 2px rgba(var(--table-color-rgb, 62, 207, 142), 0.55),
+    0 0 28px rgba(var(--table-color-rgb, 62, 207, 142), 0.25),
     0 8px 32px #00000080;
 }
 .table-node.drawing-mode { cursor: crosshair; }
@@ -191,7 +207,7 @@ defineEmits<{
 .connector.connected {
   border-color: var(--dot-color, #3ECF8E);
   background:   var(--dot-color, #3ECF8E);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--dot-color, #3ECF8E) 60%, transparent);
+  box-shadow: 0 0 6px rgba(var(--dot-color-rgb, 62, 207, 142), 0.6);
 }
 .connector:hover {
   border-color: #3ECF8E !important;
@@ -258,4 +274,17 @@ defineEmits<{
 .table-node:hover .resize-handle,
 .table-node.selected .resize-handle { color: #3ECF8E60; }
 .resize-handle:hover { color: #3ECF8E !important; }
+.table-node.read-only {
+  cursor: pointer;
+}
+.table-node.read-only:hover {
+  border-color: #3B82F680;
+  box-shadow: 0 0 15px #3B82F630;
+}
+.icon-btn.primary {
+  color: #3B82F6;
+}
+.icon-btn.primary:hover {
+  background: #3B82F620;
+}
 </style>
