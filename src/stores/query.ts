@@ -1,11 +1,9 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 export interface QColumn {
-  table: string     // alias
+  table: string
   column: string
   alias: string
   selected: boolean
@@ -14,11 +12,11 @@ export interface QColumn {
 
 export interface QTable {
   id: string
-  schemaTable: string   // original table name from schema
+  schemaTable: string
   alias: string
   position: { x: number; y: number }
   width: number
-  columns: QColumn[]    // columns from the schema, selectable
+  columns: QColumn[]
 }
 
 export type JoinType = 'INNER' | 'LEFT' | 'RIGHT' | 'FULL'
@@ -41,7 +39,7 @@ export interface QWhere {
   column: string
   op: WhereOp
   value: string
-  logic: WhereLogic   // connector to the next clause
+  logic: WhereLogic
 }
 
 export interface QOrderBy {
@@ -57,116 +55,122 @@ export interface QGroupBy {
   column: string
 }
 
-export interface QueryState {
-  tables:  QTable[]
-  joins:   QJoin[]
-  wheres:  QWhere[]
-  orders:  QOrderBy[]
-  groups:  QGroupBy[]
-  limit:   number | null
-  offset:  number | null
-  distinct: boolean
-}
-
-// ── Store ─────────────────────────────────────────────────────────────────────
-
 export const useQueryStore = defineStore('query', () => {
-
-  const tables  = ref<QTable[]>([])
-  const joins   = ref<QJoin[]>([])
-  const wheres  = ref<QWhere[]>([])
-  const orders  = ref<QOrderBy[]>([])
-  const groups  = ref<QGroupBy[]>([])
-  const limit   = ref<number | null>(null)
-  const offset  = ref<number | null>(null)
+  const tables = ref<QTable[]>([])
+  const joins = ref<QJoin[]>([])
+  const wheres = ref<QWhere[]>([])
+  const orders = ref<QOrderBy[]>([])
+  const groups = ref<QGroupBy[]>([])
+  const limit = ref<number | null>(null)
+  const offset = ref<number | null>(null)
   const distinct = ref(false)
 
   const selectedTableId = ref<string | null>(null)
-  const selectedJoinId  = ref<string | null>(null)
+  const selectedJoinId = ref<string | null>(null)
   const drawingJoin = ref<{ fromTableId: string; fromColumn: string; mouseX: number; mouseY: number } | null>(null)
+  const manualSql = ref<string | null>(null)
 
-  // ── Add table from schema ──────────────────────────────────────────────────
   function addTable(schemaTable: string, columns: string[], pos = { x: 100, y: 100 }): QTable {
     manualSql.value = null
-    const existing = tables.value.filter(t => t.schemaTable === schemaTable)
-    const alias = existing.length === 0 ? schemaTable : `${schemaTable}_${existing.length + 1}`
-    const t: QTable = {
+
+    const existing = tables.value.find((table) => table.schemaTable === schemaTable)
+    if (existing) {
+      selectedTableId.value = existing.id
+      selectedJoinId.value = null
+      return existing
+    }
+
+    const table: QTable = {
       id: uuidv4(),
       schemaTable,
-      alias,
+      alias: schemaTable,
       position: pos,
       width: 220,
-      columns: columns.map(c => ({
-        table: alias, column: c, alias: '', selected: false, aggregate: '',
+      columns: columns.map((column) => ({
+        table: schemaTable,
+        column,
+        alias: '',
+        selected: false,
+        aggregate: '',
       })),
     }
-    tables.value.push(t)
-    selectedTableId.value = t.id
-    return t
+
+    tables.value.push(table)
+    selectedTableId.value = table.id
+    selectedJoinId.value = null
+    return table
   }
 
   function removeTable(id: string) {
     manualSql.value = null
-    tables.value  = tables.value.filter(t => t.id !== id)
-    joins.value   = joins.value.filter(j => j.leftTableId !== id && j.rightTableId !== id)
-    wheres.value  = wheres.value.filter(w => {
-      const t = tables.value.find(t => t.id === id)
-      return t ? w.tableAlias !== t.alias : true
-    })
+    const removed = tables.value.find((table) => table.id === id)
+    if (!removed) return
+
+    tables.value = tables.value.filter((table) => table.id !== id)
+    joins.value = joins.value.filter((join) => join.leftTableId !== id && join.rightTableId !== id)
+    wheres.value = wheres.value.filter((where) => where.tableAlias !== removed.alias)
+    orders.value = orders.value.filter((order) => order.tableAlias !== removed.alias)
+    groups.value = groups.value.filter((group) => group.tableAlias !== removed.alias)
+
     if (selectedTableId.value === id) selectedTableId.value = null
+    if (selectedJoinId.value && !joins.value.some((join) => join.id === selectedJoinId.value)) {
+      selectedJoinId.value = null
+    }
   }
 
   function updateTablePosition(id: string, pos: { x: number; y: number }) {
-    const t = tables.value.find(t => t.id === id)
-    if (t) t.position = pos
+    const table = tables.value.find((entry) => entry.id === id)
+    if (table) table.position = pos
   }
 
   function toggleColumn(tableId: string, column: string) {
     manualSql.value = null
-    const t = tables.value.find(t => t.id === tableId)
-    if (!t) return
-    const c = t.columns.find(c => c.column === column)
-    if (c) c.selected = !c.selected
+    const table = tables.value.find((entry) => entry.id === tableId)
+    if (!table) return
+    const selected = table.columns.find((entry) => entry.column === column)
+    if (selected) selected.selected = !selected.selected
   }
 
   function setColumnAggregate(tableId: string, column: string, agg: QColumn['aggregate']) {
     manualSql.value = null
-    const t = tables.value.find(t => t.id === tableId)
-    if (!t) return
-    const c = t.columns.find(c => c.column === column)
-    if (c) { c.aggregate = agg; c.selected = true }
+    const table = tables.value.find((entry) => entry.id === tableId)
+    if (!table) return
+    const selected = table.columns.find((entry) => entry.column === column)
+    if (selected) {
+      selected.aggregate = agg
+      selected.selected = true
+    }
   }
 
   function setColumnAlias(tableId: string, column: string, alias: string) {
     manualSql.value = null
-    const t = tables.value.find(t => t.id === tableId)
-    if (!t) return
-    const c = t.columns.find(c => c.column === column)
-    if (c) c.alias = alias
+    const table = tables.value.find((entry) => entry.id === tableId)
+    if (!table) return
+    const selected = table.columns.find((entry) => entry.column === column)
+    if (selected) selected.alias = alias
   }
 
-  // ── Joins ──────────────────────────────────────────────────────────────────
   function addJoin(leftTableId: string, leftColumn: string, rightTableId: string, rightColumn: string): QJoin {
     manualSql.value = null
-    const j: QJoin = { id: uuidv4(), leftTableId, leftColumn, rightTableId, rightColumn, joinType: 'INNER' }
-    joins.value.push(j)
-    selectedJoinId.value = j.id
-    return j
+    const join: QJoin = { id: uuidv4(), leftTableId, leftColumn, rightTableId, rightColumn, joinType: 'INNER' }
+    joins.value.push(join)
+    selectedJoinId.value = join.id
+    selectedTableId.value = null
+    return join
   }
 
-  function updateJoinType(id: string, t: JoinType) {
+  function updateJoinType(id: string, type: JoinType) {
     manualSql.value = null
-    const j = joins.value.find(j => j.id === id)
-    if (j) j.joinType = t
+    const join = joins.value.find((entry) => entry.id === id)
+    if (join) join.joinType = type
   }
 
   function removeJoin(id: string) {
     manualSql.value = null
-    joins.value = joins.value.filter(j => j.id !== id)
+    joins.value = joins.value.filter((join) => join.id !== id)
     if (selectedJoinId.value === id) selectedJoinId.value = null
   }
 
-  // ── WHERE ──────────────────────────────────────────────────────────────────
   function addWhere() {
     manualSql.value = null
     const first = tables.value[0]
@@ -182,132 +186,139 @@ export const useQueryStore = defineStore('query', () => {
 
   function updateWhere(id: string, patch: Partial<QWhere>) {
     manualSql.value = null
-    const w = wheres.value.find(w => w.id === id)
-    if (w) Object.assign(w, patch)
+    const where = wheres.value.find((entry) => entry.id === id)
+    if (where) Object.assign(where, patch)
   }
 
-  function removeWhere(id: string) { 
+  function removeWhere(id: string) {
     manualSql.value = null
-    wheres.value = wheres.value.filter(w => w.id !== id) 
+    wheres.value = wheres.value.filter((where) => where.id !== id)
   }
 
-  // ── ORDER BY ───────────────────────────────────────────────────────────────
   function addOrder() {
     manualSql.value = null
     const first = tables.value[0]
-    orders.value.push({ id: uuidv4(), tableAlias: first?.alias ?? '', column: first?.columns[0]?.column ?? '', dir: 'ASC' })
+    orders.value.push({
+      id: uuidv4(),
+      tableAlias: first?.alias ?? '',
+      column: first?.columns[0]?.column ?? '',
+      dir: 'ASC',
+    })
   }
 
   function updateOrder(id: string, patch: Partial<QOrderBy>) {
     manualSql.value = null
-    const o = orders.value.find(o => o.id === id)
-    if (o) Object.assign(o, patch)
+    const order = orders.value.find((entry) => entry.id === id)
+    if (order) Object.assign(order, patch)
   }
 
-  function removeOrder(id: string) { 
+  function removeOrder(id: string) {
     manualSql.value = null
-    orders.value = orders.value.filter(o => o.id !== id) 
+    orders.value = orders.value.filter((order) => order.id !== id)
   }
 
-  // ── GROUP BY ───────────────────────────────────────────────────────────────
   function addGroup() {
     manualSql.value = null
     const first = tables.value[0]
-    groups.value.push({ id: uuidv4(), tableAlias: first?.alias ?? '', column: first?.columns[0]?.column ?? '' })
+    groups.value.push({
+      id: uuidv4(),
+      tableAlias: first?.alias ?? '',
+      column: first?.columns[0]?.column ?? '',
+    })
   }
 
   function updateGroup(id: string, patch: Partial<QGroupBy>) {
     manualSql.value = null
-    const g = groups.value.find(g => g.id === id)
-    if (g) Object.assign(g, patch)
+    const group = groups.value.find((entry) => entry.id === id)
+    if (group) Object.assign(group, patch)
   }
 
-  function removeGroup(id: string) { 
+  function removeGroup(id: string) {
     manualSql.value = null
-    groups.value = groups.value.filter(g => g.id !== id) 
+    groups.value = groups.value.filter((group) => group.id !== id)
   }
 
-  const manualSql = ref<string | null>(null)
   const sql = computed({
     get: () => {
-      console.log('SQL Getter called. Tables:', tables.value.length, 'ManualSql:', manualSql.value !== null)
       if (manualSql.value !== null) return manualSql.value
       if (tables.value.length === 0) return '-- Drag tables onto the canvas to start designing your query'
 
       const lines: string[] = []
       lines.push('-- Generated SQL Query')
 
-      // SELECT
-      const selectedCols = tables.value.flatMap(t =>
-        t.columns.filter(c => c.selected).map(c => {
-          const ref = `${t.alias}.${c.column}`
-          const expr = c.aggregate ? `${c.aggregate}(${ref})` : ref
-          const as = c.alias ? ` AS ${c.alias}` : ''
+      const selectedCols = tables.value.flatMap((table) =>
+        table.columns.filter((column) => column.selected).map((column) => {
+          const ref = `${table.alias}.${column.column}`
+          const expr = column.aggregate ? `${column.aggregate}(${ref})` : ref
+          const as = column.alias ? ` AS ${column.alias}` : ''
           return `  ${expr}${as}`
-        })
+        }),
       )
 
-      const selectBody = selectedCols.length > 0 ? selectedCols.join(',\n') : `  *`
       lines.push(`SELECT${distinct.value ? ' DISTINCT' : ''}`)
-      lines.push(selectBody)
+      lines.push(selectedCols.length > 0 ? selectedCols.join(',\n') : '  *')
 
-      // FROM
-      if (tables.value.length > 0) {
-        const base = tables.value[0]
-        const baseRef = base.schemaTable === base.alias ? base.alias : `${base.schemaTable} AS ${base.alias}`
-        lines.push(`FROM ${baseRef}`)
-      }
+      const base = tables.value[0]
+      const baseRef = base.schemaTable === base.alias ? base.alias : `${base.schemaTable} AS ${base.alias}`
+      lines.push(`FROM ${baseRef}`)
 
-      // JOINs
       for (const join of joins.value) {
-        const lt = tables.value.find(t => t.id === join.leftTableId)
-        const rt = tables.value.find(t => t.id === join.rightTableId)
-        if (!lt || !rt) continue
-        const rtRef = rt.schemaTable === rt.alias ? rt.alias : `${rt.schemaTable} AS ${rt.alias}`
-        lines.push(`${join.joinType} JOIN ${rtRef}`)
-        lines.push(`  ON ${lt.alias}.${join.leftColumn} = ${rt.alias}.${join.rightColumn}`)
+        const left = tables.value.find((table) => table.id === join.leftTableId)
+        const right = tables.value.find((table) => table.id === join.rightTableId)
+        if (!left || !right) continue
+        const rightRef = right.schemaTable === right.alias ? right.alias : `${right.schemaTable} AS ${right.alias}`
+        lines.push(`${join.joinType} JOIN ${rightRef}`)
+        lines.push(`  ON ${left.alias}.${join.leftColumn} = ${right.alias}.${join.rightColumn}`)
       }
 
-      // WHERE
       if (wheres.value.length > 0) {
         lines.push('WHERE')
-        wheres.value.forEach((w, i) => {
-          const needsValue = !['IS NULL', 'IS NOT NULL'].includes(w.op)
-          const val = needsValue ? (w.op === 'LIKE' ? `'${w.value}'` : w.op === 'IN' ? `(${w.value})` : `'${w.value}'`) : ''
-          const clause = `  ${w.tableAlias}.${w.column} ${w.op}${val ? ' ' + val : ''}`
-          const connector = i < wheres.value.length - 1 ? ` ${w.logic}` : ''
+        wheres.value.forEach((where, index) => {
+          const needsValue = !['IS NULL', 'IS NOT NULL'].includes(where.op)
+          const value = needsValue
+            ? where.op === 'LIKE'
+              ? `'${where.value}'`
+              : where.op === 'IN'
+                ? `(${where.value})`
+                : `'${where.value}'`
+            : ''
+          const clause = `  ${where.tableAlias}.${where.column} ${where.op}${value ? ` ${value}` : ''}`
+          const connector = index < wheres.value.length - 1 ? ` ${where.logic}` : ''
           lines.push(clause + connector)
         })
       }
 
-      // GROUP BY
       if (groups.value.length > 0) {
         lines.push('GROUP BY')
-        lines.push(groups.value.map(g => `  ${g.tableAlias}.${g.column}`).join(',\n'))
+        lines.push(groups.value.map((group) => `  ${group.tableAlias}.${group.column}`).join(',\n'))
       }
 
-      // ORDER BY
       if (orders.value.length > 0) {
         lines.push('ORDER BY')
-        lines.push(orders.value.map(o => `  ${o.tableAlias}.${o.column} ${o.dir}`).join(',\n'))
+        lines.push(orders.value.map((order) => `  ${order.tableAlias}.${order.column} ${order.dir}`).join(',\n'))
       }
 
-      // LIMIT / OFFSET
       if (limit.value !== null) lines.push(`LIMIT ${limit.value}`)
       if (offset.value !== null) lines.push(`OFFSET ${offset.value}`)
 
-      return lines.join('\n') + ';'
+      return `${lines.join('\n')};`
     },
-    set: (val: string) => {
-      manualSql.value = val
-    }
+    set: (value: string) => {
+      manualSql.value = value
+    },
   })
 
   function reset() {
-    tables.value = []; joins.value = []; wheres.value = []
-    orders.value = []; groups.value = []
-    limit.value = null; offset.value = null; distinct.value = false
-    selectedTableId.value = null; selectedJoinId.value = null
+    tables.value = []
+    joins.value = []
+    wheres.value = []
+    orders.value = []
+    groups.value = []
+    limit.value = null
+    offset.value = null
+    distinct.value = false
+    selectedTableId.value = null
+    selectedJoinId.value = null
     manualSql.value = null
   }
 
@@ -316,14 +327,37 @@ export const useQueryStore = defineStore('query', () => {
   }
 
   return {
-    tables, joins, wheres, orders, groups, limit, offset, distinct,
-    selectedTableId, selectedJoinId, drawingJoin, sql,
-    addTable, removeTable, updateTablePosition, toggleColumn,
-    setColumnAggregate, setColumnAlias,
-    addJoin, updateJoinType, removeJoin,
-    addWhere, updateWhere, removeWhere,
-    addOrder, updateOrder, removeOrder,
-    addGroup, updateGroup, removeGroup,
-    reset, resetManualSql,
+    tables,
+    joins,
+    wheres,
+    orders,
+    groups,
+    limit,
+    offset,
+    distinct,
+    selectedTableId,
+    selectedJoinId,
+    drawingJoin,
+    sql,
+    addTable,
+    removeTable,
+    updateTablePosition,
+    toggleColumn,
+    setColumnAggregate,
+    setColumnAlias,
+    addJoin,
+    updateJoinType,
+    removeJoin,
+    addWhere,
+    updateWhere,
+    removeWhere,
+    addOrder,
+    updateOrder,
+    removeOrder,
+    addGroup,
+    updateGroup,
+    removeGroup,
+    reset,
+    resetManualSql,
   }
 })

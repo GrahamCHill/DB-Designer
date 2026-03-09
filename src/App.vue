@@ -36,6 +36,24 @@
         <button
           v-if="workspaceStore.active === 'query'"
           class="ws-action-btn"
+          title="Export query canvas as PNG"
+          @click="exportPng('png')"
+        >⤓ PNG</button>
+        <button
+          v-if="workspaceStore.active === 'query'"
+          class="ws-action-btn"
+          title="Reset SQL preview to generated SQL"
+          @click="resetQuerySql"
+        >Reset</button>
+        <button
+          v-if="workspaceStore.active === 'query'"
+          class="ws-action-btn"
+          :title="queryCopied ? 'Copied!' : 'Copy SQL'"
+          @click="copyQuerySQL"
+        >{{ queryCopied ? 'Copied' : 'Copy' }}</button>
+        <button
+          v-if="workspaceStore.active === 'query'"
+          class="ws-action-btn"
           title="Export SQL file"
           @click="exportQuerySQL"
         >⤓ .sql Export</button>
@@ -119,9 +137,26 @@ const workspaces: { id: Workspace; label: string; icon: string }[] = [
 
 import { useApiStore } from './stores/api'
 const apiStore = useApiStore()
+const queryCopied = ref(false)
 
 function switchWorkspace(ws: Workspace) {
   workspaceStore.setWorkspace(ws)
+}
+
+async function copyQuerySQL() {
+  try {
+    await navigator.clipboard.writeText(queryStore.sql)
+    queryCopied.value = true
+    window.setTimeout(() => {
+      queryCopied.value = false
+    }, 2000)
+  } catch (err) {
+    console.error('Failed to copy SQL:', err)
+  }
+}
+
+function resetQuerySql() {
+  queryStore.resetManualSql()
 }
 
 function exportQuerySQL() {
@@ -368,3 +403,7 @@ body { font-family: 'JetBrains Mono','Fira Code',monospace; background: #0f0f12;
   z-index: 1;
 }
 </style>
+
+
+
+
