@@ -1,7 +1,7 @@
 [package]
 name = "db-designer"
 version = "0.1.0"
-description = "DB Designer — visual database schema designer"
+description = "DB Designer - visual database schema designer"
 authors = ["Graham Hill"]
 edition = "2021"
 
@@ -23,12 +23,15 @@ chrono = { version = "0.4", features = ["serde"] }
 tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
 
 sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "macros"], optional = true }
+tiberius = { version = "0.12", default-features = false, features = ["native-tls", "tds73", "tokio", "tokio-util", "sql-browser-tokio", "chrono"], optional = true }
+tokio-util = { version = "0.7", features = ["compat"], optional = true }
 
 [features]
-default = ["postgres", "sqlite", "mysql"]
+default = ["postgres", "sqlite", "mysql", "sqlserver"]
 postgres = ["sqlx", "sqlx/postgres"]
 sqlite   = ["sqlx", "sqlx/sqlite"]
 mysql    = ["sqlx", "sqlx/mysql"]
+sqlserver = ["dep:tiberius", "dep:tokio-util", "tokio/net", "tokio/time"]
 
 [profile.release]
 panic = "abort"
