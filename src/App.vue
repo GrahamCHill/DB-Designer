@@ -432,7 +432,8 @@ body { font-family: 'JetBrains Mono','Fira Code',monospace; background: #0f0f12;
 .main-area { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
 .main { flex: 1; overflow: hidden; position: relative; }
 
-.api-canvas-container {
+.api-canvas-container F{
+  background-color: #0f0f12 !important;
   position: absolute;
   inset: 0;
 }

@@ -3,7 +3,10 @@
     <div class="panel-header">
       <div>
         <div class="eyebrow">API Overview</div>
-        <h3>{{ headerTitle }}</h3>
+        <div class="header-row">
+          <h3>{{ headerTitle }}</h3>
+          <a class="learn-link" :href="helpLink" target="_blank" rel="noreferrer">{{ helpLabel }}</a>
+        </div>
       </div>
       <div class="mode-pill">{{ modeLabel }}</div>
     </div>
@@ -83,6 +86,10 @@ import { useApiExports } from '../../composables/useApiExports'
 import { METHOD_COLORS, GQL_KIND_COLORS } from '../../types/api'
 import type { ApiExportTarget, RestEndpointNode, RestNode } from '../../types/api'
 
+const REST_HELP_LINK = 'https://developer.mozilla.org/en-US/docs/Glossary/REST'
+const GRAPHQL_HELP_LINK = 'https://graphql.org/learn/'
+const FEDERATION_HELP_LINK = 'https://www.apollographql.com/docs/graphos/schema-design/federated-schemas/federation'
+
 const store = useApiStore()
 const schemaStore = useSchemaStore()
 const { exportTargets, exportOutput, exportDownloadName, exportTargetForMode } = useApiExports()
@@ -99,6 +106,16 @@ const headerTitle = computed(() => {
   if (store.mode === 'rest') return store.project.rest.title || store.project.name
   if (store.mode === 'graphql') return store.project.graphql.name || store.project.name
   return store.project.federation.name || store.project.name
+})
+const helpLink = computed(() => {
+  if (store.mode === 'rest') return REST_HELP_LINK
+  if (store.mode === 'graphql') return GRAPHQL_HELP_LINK
+  return FEDERATION_HELP_LINK
+})
+const helpLabel = computed(() => {
+  if (store.mode === 'rest') return 'What is REST?'
+  if (store.mode === 'graphql') return 'Learn GraphQL'
+  return 'Learn Federation'
 })
 
 const metrics = computed(() => {
@@ -274,9 +291,9 @@ const previewText = computed(() => exportOutput(selectedTarget.value))
 
 function chipStyle(item: CatalogItem) {
   return {
-    background: `${item.color}22`,
+    background: `${item.color}18`,
     color: item.color,
-    borderColor: `${item.color}55`,
+    borderColor: `${item.color}33`,
   }
 }
 
@@ -407,12 +424,43 @@ function downloadOutput() {
   gap: 12px;
   padding: 16px;
   border-radius: 16px;
-  border: 1px solid #2b3244;
-  background: linear-gradient(180deg, #111723f0 0%, #0c111af2 100%);
-  box-shadow: 0 24px 60px #00000055;
-  backdrop-filter: blur(12px);
+  border: 1px solid #1a1a24;
+  background: #0d0d12;
+  box-shadow: 0 20px 50px rgb(0, 0, 0);
   z-index: 5;
   pointer-events: auto;
+  scrollbar-color: #244437 #0f0f15;
+}
+
+.api-overview-panel :deep(*) {
+  scrollbar-width: thin;
+  scrollbar-color: #244437 #0f0f15;
+}
+
+.api-overview-panel :deep(*::-webkit-scrollbar) {
+  width: 10px;
+  height: 10px;
+}
+
+.api-overview-panel :deep(*::-webkit-scrollbar-track) {
+  background: #0f0f15;
+  border-radius: 999px;
+}
+
+.api-overview-panel :deep(*::-webkit-scrollbar-thumb) {
+  background: linear-gradient(180deg, #244437 0%, #1b342a 100%);
+  border: 2px solid #0f0f15;
+  border-radius: 999px;
+}
+
+.api-overview-panel :deep(*::-webkit-scrollbar-thumb:hover) {
+  background: linear-gradient(180deg, #2d5a48 0%, #224236 100%);
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .panel-header {
@@ -441,7 +489,7 @@ function downloadOutput() {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: #5e738f;
+  color: #61748f;
   margin-bottom: 4px;
 }
 
@@ -450,12 +498,26 @@ h3 {
   color: #eef4ff;
 }
 
+.learn-link {
+  color: #3ecf8e;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.learn-link:hover {
+  color: #67dfab;
+  border-bottom-color: #67dfab;
+}
+
 .mode-pill {
   padding: 6px 10px;
   border-radius: 999px;
-  border: 1px solid #35506e;
-  background: #122032;
-  color: #7fc4ff;
+  border: 1px solid #244437;
+  background: #0f1812;
+  color: #3ecf8e;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -473,12 +535,12 @@ h3 {
 .catalog-block,
 .preview-code {
   border-radius: 12px;
-  border: 1px solid #1f2a3d;
+  border: 1px solid #1a1a24;
 }
 
 .metric-card {
   padding: 10px;
-  background: #121927;
+  background: linear-gradient(180deg, #15151c 0%, #111118 100%);
 }
 
 .metric-label,
@@ -490,7 +552,7 @@ h3 {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: #61748f;
+  color: #7f92af;
 }
 
 .metric-value {
@@ -503,13 +565,13 @@ h3 {
 .metric-note {
   font-size: 10px;
   line-height: 1.4;
-  color: #8a98ad;
+  color: #9cb0cb;
 }
 
 .summary-block,
 .catalog-block {
   padding: 12px;
-  background: #0d1420;
+  background: linear-gradient(180deg, #121219 0%, #0d0d12 100%);
 }
 
 .summary-title {
@@ -545,8 +607,8 @@ h3 {
 .catalog-section {
   padding: 10px;
   border-radius: 10px;
-  background: #0a1018;
-  border: 1px solid #182235;
+  background: #0f0f15;
+  border: 1px solid #181820;
 }
 
 .catalog-header {
@@ -560,7 +622,7 @@ h3 {
 }
 
 .catalog-count {
-  color: #6f87a7;
+  color: #7f92af;
   font-size: 10px;
 }
 
@@ -577,15 +639,22 @@ h3 {
   gap: 8px;
   padding: 8px;
   border-radius: 8px;
-  border: 1px solid #1a2739;
-  background: #0f1623;
+  border: 1px solid #21212d;
+  background: #15151c;
   text-align: left;
   cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.catalog-item:hover {
+  border-color: #2b5a45;
+  background: #171920;
 }
 
 .catalog-item.active {
-  border-color: #4aa277;
-  box-shadow: inset 0 0 0 1px #4aa27755;
+  border-color: #3ecf8e;
+  background: #101914;
+  box-shadow: inset 0 0 0 1px rgba(62, 207, 142, 0.22);
 }
 
 .catalog-chip {
@@ -634,9 +703,9 @@ h3 {
 .target-select {
   flex: 1;
   min-width: 0;
-  background: #0d1420;
+  background: #18181f;
   color: #e6effa;
-  border: 1px solid #243147;
+  border: 1px solid #25252f;
   border-radius: 10px;
   padding: 8px 10px;
   font-family: 'JetBrains Mono', monospace;
@@ -658,16 +727,25 @@ h3 {
 }
 
 .ghost-btn {
-  background: transparent;
-  color: #9cb9d8;
-  border: 1px solid #2a3a53;
+  background: #18181f;
+  color: #9cb0cb;
+  border: 1px solid #25252f;
+}
+
+.ghost-btn:hover {
+  color: #e0e0e0;
+  background: #20202a;
 }
 
 .solid-btn {
-  background: #7fc4ff;
-  color: #08111a;
+  background: #3ecf8e;
+  color: #0a1a12;
   border: none;
   font-weight: 700;
+}
+
+.solid-btn:hover {
+  background: #45e09a;
 }
 
 .preview-code {
@@ -676,7 +754,7 @@ h3 {
   margin: 0;
   padding: 12px;
   overflow: auto;
-  background: #09101a;
+  background: #0a0a0f;
   color: #b9cee8;
   font-size: 11px;
   line-height: 1.55;
@@ -698,6 +776,12 @@ h3 {
 
   .metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .header-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
 }
 </style>

@@ -59,6 +59,10 @@ function pyType(type: string): string {
   return 'str'
 }
 
+function escapeTemplateLiteral(value: string): string {
+  return value.replace(/`/g, '\`').replace(/\$\{/g, '\\${')
+}
+
 export function useApiExports() {
   const store = useApiStore()
 
@@ -298,7 +302,7 @@ export function useApiExports() {
   }
 
   function resolverStubLines(useTypes: boolean): string[] {
-    const lines: string[] = ['export const resolvers = {']
+    const lines: string[] = useTypes ? ['export const resolvers = {'] : ['const resolvers = {']
     for (const node of store.gqlNodes) {
       if (!['type', 'query-root', 'mutation-root', 'subscription-root', 'interface'].includes(node.kind)) continue
       const typeName = node.kind === 'query-root' ? 'Query'
@@ -317,6 +321,7 @@ export function useApiExports() {
       lines.push('  },')
     }
     lines.push('}')
+    if (!useTypes) lines.push('', 'module.exports = { resolvers }')
     return lines
   }
 
@@ -328,17 +333,22 @@ export function useApiExports() {
     return resolverStubLines(false).join('\n')
   }
 
+  function federationTypeDefs(): string {
+    return store.exportFedSdl()
+  }
+
   function exportFederationSubgraph(useTypes: boolean): string {
     const lines: string[] = [
       "import { ApolloServer } from '@apollo/server'",
       "import { startStandaloneServer } from '@apollo/server/standalone'",
       "import { buildSubgraphSchema } from '@apollo/subgraph'",
+      "import { parse } from 'graphql'",
       '',
       'const typeDefs = `',
-      store.exportFedSdl(),
+      escapeTemplateLiteral(federationTypeDefs()),
       '`',
       '',
-      'const resolvers = {',
+      useTypes ? 'const resolvers: Record<string, Record<string, unknown>> = {' : 'const resolvers = {',
     ]
 
     for (const service of store.fedServices) {
@@ -353,17 +363,32 @@ export function useApiExports() {
           lines.push(`      throw new Error('Implement ${service.name}.${node.name}.${field.name}')`)
           lines.push('    },')
         }
+        if (node.isEntity) {
+          const keyField = node.keyFields[0] || node.fields[0]?.name || 'id'
+          const entitySignature = useTypes
+            ? `__resolveReference: async (reference: Record<string, unknown>) => ({ ${safeIdentifier(keyField)}: reference.${safeIdentifier(keyField)} }),`
+            : `__resolveReference: async (reference) => ({ ${safeIdentifier(keyField)}: reference.${safeIdentifier(keyField)} }),`
+          lines.push(`    ${entitySignature}`)
+        }
         lines.push('  },')
       }
     }
 
     lines.push('}')
     lines.push('')
-    lines.push('const server = new ApolloServer({')
-    lines.push('  schema: buildSubgraphSchema({ typeDefs, resolvers }),')
-    lines.push('})')
+    lines.push('async function startServer() {')
+    lines.push('  const server = new ApolloServer({')
+    lines.push("    schema: buildSubgraphSchema([{ typeDefs: parse(typeDefs), resolvers }]),")
+    lines.push('  })')
     lines.push('')
-    lines.push('startStandaloneServer(server, { listen: { port: 4001 } })')
+    lines.push('  const { url } = await startStandaloneServer(server, { listen: { port: 4001 } })')
+    lines.push("  console.log(`Subgraph ready at ${url}`)")
+    lines.push('}')
+    lines.push('')
+    lines.push("startServer().catch(error => {")
+    lines.push("  console.error('Failed to start subgraph server', error)")
+    lines.push('})')
+
     return lines.join('\n')
   }
 
@@ -375,7 +400,7 @@ export function useApiExports() {
     if (target === 'graphql-sdl') return store.exportGqlSdl()
     if (target === 'graphql-resolvers-ts') return exportGraphqlResolverStubsTs()
     if (target === 'graphql-resolvers-js') return exportGraphqlResolverStubsJs()
-    if (target === 'federation-sdl') return store.exportFedSdl()
+    if (target === 'federation-sdl') return federationTypeDefs()
     if (target === 'federation-subgraph-ts') return exportFederationSubgraph(true)
     return exportFederationSubgraph(false)
   }

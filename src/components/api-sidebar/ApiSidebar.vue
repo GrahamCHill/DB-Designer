@@ -103,10 +103,13 @@
       </template>
 
       <template v-if="store.mode === 'graphql'">
-        <label class="section-label">Types ({{ store.gqlNodes.length }})</label>
+        <label class="section-label" title="GraphQL schema nodes currently modeled on the API canvas. Click to select and double-click to edit.">
+          Types ({{ store.gqlNodes.length }})
+        </label>
         <div class="item-list scrollable">
           <div v-for="n in store.gqlNodes" :key="n.id"
             class="list-item" :class="{ active: store.selectedNodeId === n.id }"
+            :title="'Click to select this GraphQL type. Double-click to edit it.'"
             @click="store.selectedNodeId = n.id"
             @dblclick="store.editingNodeId = n.id">
             <span class="kind-chip" :style="{ background: n.color + '22', color: n.color, borderColor: n.color + '44' }">
@@ -120,10 +123,13 @@
       </template>
 
       <template v-if="store.mode === 'federation'">
-        <label class="section-label">Services ({{ store.fedServices.length }})</label>
+        <label class="section-label" title="Federation services or subgraphs currently modeled on the API canvas. Click to select and double-click to edit.">
+          Services ({{ store.fedServices.length }})
+        </label>
         <div class="item-list">
           <div v-for="svc in store.fedServices" :key="svc.id"
             class="list-item svc-item" :class="{ active: store.selectedServiceId === svc.id }"
+            :title="'Click to select this service. Double-click to edit it.'"
             @click="store.selectedServiceId = svc.id; store.selectedNodeId = null"
             @dblclick="store.editingServiceId = svc.id">
             <span class="item-dot" :style="{ background: svc.color }" />
@@ -132,10 +138,13 @@
           </div>
           <div v-if="store.fedServices.length === 0" class="list-empty">No services</div>
         </div>
-        <label class="section-label" style="margin-top:8px">Types ({{ store.fedNodes.length }})</label>
+        <label class="section-label" style="margin-top:8px" title="Federation object and extension types currently modeled on the API canvas. Click to select and double-click to edit.">
+          Types ({{ store.fedNodes.length }})
+        </label>
         <div class="item-list scrollable">
           <div v-for="n in store.fedNodes" :key="n.id"
             class="list-item" :class="{ active: store.selectedNodeId === n.id }"
+            :title="'Click to select this federation type. Double-click to edit it.'"
             @click="store.selectedNodeId = n.id"
             @dblclick="store.editingNodeId = n.id">
             <span class="item-dot" :style="{ background: n.color }" />
