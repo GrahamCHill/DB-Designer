@@ -10,8 +10,8 @@ import type {
 } from '../types/api'
 import { NODE_DEFAULT_WIDTH, METHOD_COLORS, GQL_KIND_COLORS } from '../types/api'
 
-const ENDPOINT_COLORS = ['#3ECF8E','#3B82F6','#8B5CF6','#F59E0B','#EF4444','#06B6D4','#EC4899','#10B981']
-const SERVICE_COLORS  = ['#3B82F6','#8B5CF6','#F59E0B','#EF4444','#06B6D4','#EC4899','#3ECF8E','#F97316']
+const ENDPOINT_COLORS = ['#3ECF8E','#2FBF8F','#58C98D','#8ACB88','#56B8A6','#D5A35B','#E0705E','#A6D97A']
+const SERVICE_COLORS  = ['#3ECF8E','#57C5A0','#56B8A6','#8ACB88','#D5A35B','#E0705E','#A6D97A','#2FBF8F']
 
 function makeProject(): ApiProject {
   return {
@@ -40,7 +40,7 @@ function makeFedSchema(): FedSchema {
 export const useApiStore = defineStore('api', () => {
   const project = ref<ApiProject>(makeProject())
 
-  // ── DB Schema integration ──────────────────────────────────
+  // â”€â”€ DB Schema integration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const importedSchema = ref<{ name: string; tables: any[] } | null>(null)
 
   function loadDbSchema(json: any) {
@@ -73,7 +73,7 @@ export const useApiStore = defineStore('api', () => {
         })),
         position: { x: pos.x + 350, y: pos.y },
         width: NODE_DEFAULT_WIDTH,
-        color: '#3B82F6',
+        color: '#57C5A0',
         groupId: null
       }
       project.value.rest.nodes.push(typeNode)
@@ -147,7 +147,7 @@ export const useApiStore = defineStore('api', () => {
     persist()
   }
 
-  // ── Persistence ────────────────────────────────────────────
+  // â”€â”€ Persistence â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function persist() {
     project.value.updatedAt = new Date().toISOString()
     try { localStorage.setItem('api-modeler-project', JSON.stringify(project.value)) } catch {}
@@ -174,11 +174,11 @@ export const useApiStore = defineStore('api', () => {
 
   loadFromStorage()
 
-  // ── Mode ───────────────────────────────────────────────────
+  // â”€â”€ Mode â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const mode = computed(() => project.value.mode)
   function setMode(m: DesignerMode) { project.value.mode = m; persist() }
 
-  // ── UI state ───────────────────────────────────────────────
+  // â”€â”€ UI state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const selectedNodeId     = ref<string | null>(null)
   const selectedRelId      = ref<string | null>(null)
   const selectedGroupId    = ref<string | null>(null)
@@ -192,7 +192,7 @@ export const useApiStore = defineStore('api', () => {
     selectedServiceId.value = editingNodeId.value = editingGroupId.value = null
   }
 
-  // ── REST helpers ───────────────────────────────────────────
+  // â”€â”€ REST helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const restNodes     = computed(() => project.value.rest.nodes)
   const restRelations = computed(() => project.value.rest.relations)
@@ -273,7 +273,7 @@ export const useApiStore = defineStore('api', () => {
 
   function commitRestNodeWidth(id: string) { persist() }
 
-  // ── GraphQL helpers ────────────────────────────────────────
+  // â”€â”€ GraphQL helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const gqlNodes     = computed(() => project.value.graphql.nodes)
   const gqlRelations = computed(() => project.value.graphql.relations)
@@ -342,7 +342,7 @@ export const useApiStore = defineStore('api', () => {
 
   function commitGqlNodeWidth(id: string) { persist() }
 
-  // ── Federation helpers ─────────────────────────────────────
+  // â”€â”€ Federation helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const fedServices  = computed(() => project.value.federation.services)
   const fedNodes     = computed(() => project.value.federation.nodes)
@@ -374,7 +374,7 @@ export const useApiStore = defineStore('api', () => {
   function deleteService(id: string) {
     const f = project.value.federation
     f.services = f.services.filter(s => s.id !== id)
-    // Orphan nodes — keep them but clear serviceId
+    // Orphan nodes â€” keep them but clear serviceId
     f.nodes.forEach(n => { if (n.serviceId === id) n.serviceId = '' })
     f.relations = f.relations.filter(r => r.sourceServiceId !== id && r.targetServiceId !== id)
     if (selectedServiceId.value === id) selectedServiceId.value = null
@@ -450,7 +450,7 @@ export const useApiStore = defineStore('api', () => {
     if (s) { s.size = size; persist() }
   }
 
-  // ── Groups (shared pattern across all modes) ───────────────
+  // â”€â”€ Groups (shared pattern across all modes) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   function currentGroups() {
     if (project.value.mode === 'rest')       return project.value.rest.groups
@@ -494,7 +494,7 @@ export const useApiStore = defineStore('api', () => {
     persist()
   }
 
-  // ── Export helpers ─────────────────────────────────────────
+  // â”€â”€ Export helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   function exportOpenApi(): string {
     const r = project.value.rest
@@ -565,7 +565,7 @@ export const useApiStore = defineStore('api', () => {
     const lines: string[] = ['# GraphQL Federation SDL\n']
     const f = project.value.federation
     for (const svc of f.services) {
-      lines.push(`# ── Service: ${svc.name} (${svc.url}) ──`)
+      lines.push(`# â”€â”€ Service: ${svc.name} (${svc.url}) â”€â”€`)
       const svcNodes = f.nodes.filter(n => n.serviceId === svc.id)
       for (const node of svcNodes) {
         const ext = node.isExtension ? 'extend ' : ''

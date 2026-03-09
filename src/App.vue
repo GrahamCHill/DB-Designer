@@ -106,6 +106,7 @@
                 @generate-api="apiStore.createFromTable"
               />
               <ApiCanvas />
+              <ApiOverviewPanel />
             </div>
           </main>
         </div>
@@ -216,6 +217,7 @@ import TableEditorModal      from './components/modals/TableEditorModal.vue'
 import DBConnectModal        from './components/modals/DBConnectModal.vue'
 import ApiSidebar            from './components/api-sidebar/ApiSidebar.vue'
 import ApiCanvas             from './components/canvas/api-canvas/ApiCanvas.vue'
+import ApiOverviewPanel      from './components/api-panels/ApiOverviewPanel.vue'
 import QuerySidebar          from './components/query-sidebar/QuerySidebar.vue'
 import QueryCanvas           from './components/query-canvas/QueryCanvas.vue'
 import CodegenPanel          from './components/codegen/CodegenPanel.vue'
@@ -454,6 +456,10 @@ body { font-family: 'JetBrains Mono','Fira Code',monospace; background: #0f0f12;
   z-index: 1;
 }
 </style>
+
+
+
+
 
 
 

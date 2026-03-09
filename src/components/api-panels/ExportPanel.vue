@@ -4,11 +4,17 @@
       <div class="panel-header">
         <span class="panel-title">Export</span>
         <div class="export-tabs">
-          <button v-for="t in tabs" :key="t.id"
-            class="exp-tab" :class="{ active: activeTab === t.id }"
-            @click="activeTab = t.id">{{ t.label }}</button>
+          <button
+            v-for="target in exportTargets"
+            :key="target.id"
+            class="exp-tab"
+            :class="{ active: activeTab === target.id }"
+            @click="activeTab = target.id"
+          >
+            {{ target.label }}
+          </button>
         </div>
-        <button class="close-btn" @click="$emit('close')">✕</button>
+        <button class="close-btn" @click="$emit('close')">x</button>
       </div>
 
       <div class="panel-body">
@@ -16,57 +22,46 @@
       </div>
 
       <div class="panel-footer">
-        <button class="btn-copy" @click="copy">{{ copied ? '✓ Copied' : '⎘ Copy' }}</button>
-        <button class="btn-download" @click="download">↓ Download</button>
+        <button class="btn-copy" @click="copy">{{ copied ? 'Copied' : 'Copy' }}</button>
+        <button class="btn-download" @click="download">Download</button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useApiStore } from '../../stores/api'
+import { computed, ref, watch } from 'vue'
+import { useApiExports } from '../../composables/useApiExports'
+import type { ApiExportTarget } from '../../types/api'
 
-const emit  = defineEmits(['close'])
-const store = useApiStore()
+const { exportTargets, exportOutput, exportDownloadName, exportTargetForMode } = useApiExports()
 
-const activeTab = ref(
-  store.mode === 'rest'       ? 'openapi'
-  : store.mode === 'graphql'  ? 'gql'
-  : 'fed'
-)
+const activeTab = ref<ApiExportTarget>(exportTargetForMode())
 const copied = ref(false)
 
-const tabs = [
-  { id: 'openapi', label: 'OpenAPI 3.0' },
-  { id: 'gql',     label: 'GraphQL SDL' },
-  { id: 'fed',     label: 'Federation SDL' },
-]
+watch(exportTargets, (targets) => {
+  if (!targets.some(target => target.id === activeTab.value)) {
+    activeTab.value = exportTargetForMode()
+  }
+}, { immediate: true })
 
-const activeOutput = computed(() => {
-  if (activeTab.value === 'openapi') return store.exportOpenApi()
-  if (activeTab.value === 'gql')     return store.exportGqlSdl()
-  return store.exportFedSdl()
-})
-
-const fileName = computed(() => {
-  const name = store.project.name ?? 'api'
-  if (activeTab.value === 'openapi') return `${name}.openapi.json`
-  if (activeTab.value === 'gql')     return `${name}.graphql`
-  return `${name}.federation.graphql`
-})
+const activeOutput = computed(() => exportOutput(activeTab.value))
 
 async function copy() {
   await navigator.clipboard.writeText(activeOutput.value)
   copied.value = true
-  setTimeout(() => { copied.value = false }, 1800)
+  window.setTimeout(() => {
+    copied.value = false
+  }, 1800)
 }
 
 function download() {
   const blob = new Blob([activeOutput.value], { type: 'text/plain' })
-  const url  = URL.createObjectURL(blob)
-  const a    = document.createElement('a')
-  a.href = url; a.download = fileName.value; a.click()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = exportDownloadName(activeTab.value)
+  a.click()
   URL.revokeObjectURL(url)
 }
 </script>
@@ -78,7 +73,7 @@ function download() {
 }
 .panel {
   background: #10101a; border: 1px solid #2a2a3a; border-radius: 12px;
-  width: 720px; max-height: 80vh; display: flex; flex-direction: column;
+  width: 820px; max-width: calc(100vw - 40px); max-height: 80vh; display: flex; flex-direction: column;
   box-shadow: 0 24px 80px #000000b0;
 }
 .panel-header {
@@ -86,11 +81,11 @@ function download() {
   padding: 14px 18px; border-bottom: 1px solid #1e1e2a;
 }
 .panel-title { font-size: 14px; font-weight: 700; color: #f0f0f0; }
-.export-tabs { display: flex; gap: 4px; flex: 1; }
+.export-tabs { display: flex; gap: 4px; flex: 1; overflow-x: auto; }
 .exp-tab {
   padding: 5px 12px; border-radius: 5px; border: 1px solid #2a2a3a;
   background: none; color: #555; cursor: pointer; font-size: 11px; font-weight: 600;
-  transition: all 0.15s;
+  transition: all 0.15s; white-space: nowrap;
 }
 .exp-tab:hover  { color: #e0e0e0; background: #1e1e2a; }
 .exp-tab.active { color: #3ECF8E; border-color: #3ECF8E40; background: #0f1f18; }

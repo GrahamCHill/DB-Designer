@@ -11,7 +11,7 @@
   >
     <div class="canvas-content" :style="contentStyle">
 
-      <!-- ── FEDERATION: services rendered behind nodes ── -->
+      <!-- Ã¢â€â‚¬Ã¢â€â‚¬ FEDERATION: services rendered behind nodes Ã¢â€â‚¬Ã¢â€â‚¬ -->
       <template v-if="store.mode === 'federation'">
         <ServiceNode
           v-for="svc in store.fedServices"
@@ -27,7 +27,7 @@
         />
       </template>
 
-      <!-- ── RELATIONS SVG ── -->
+      <!-- Ã¢â€â‚¬Ã¢â€â‚¬ RELATIONS SVG Ã¢â€â‚¬Ã¢â€â‚¬ -->
       <svg class="relations-svg" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <marker id="arrow-end" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
@@ -83,7 +83,7 @@
           stroke-dasharray="5,3" opacity="0.7" pointer-events="none" />
       </svg>
 
-      <!-- ── REST nodes ── -->
+      <!-- Ã¢â€â‚¬Ã¢â€â‚¬ REST nodes Ã¢â€â‚¬Ã¢â€â‚¬ -->
       <template v-if="store.mode === 'rest'">
         <template v-for="node in store.restNodes" :key="node.id">
           <EndpointNode
@@ -114,7 +114,7 @@
         </template>
       </template>
 
-      <!-- ── GQL nodes ── -->
+      <!-- Ã¢â€â‚¬Ã¢â€â‚¬ GQL nodes Ã¢â€â‚¬Ã¢â€â‚¬ -->
       <template v-if="store.mode === 'graphql'">
         <GqlTypeNode
           v-for="node in store.gqlNodes"
@@ -134,7 +134,7 @@
         />
       </template>
 
-      <!-- ── Federation nodes ── -->
+      <!-- Ã¢â€â‚¬Ã¢â€â‚¬ Federation nodes Ã¢â€â‚¬Ã¢â€â‚¬ -->
       <template v-if="store.mode === 'federation'">
         <FedTypeNode
           v-for="node in store.fedNodes"
@@ -158,7 +158,7 @@
 
     <!-- Empty state -->
     <div v-if="isEmpty" class="empty-state">
-      <div class="empty-icon">⬡</div>
+      <div class="empty-icon">API</div>
       <p>Canvas is empty</p>
       <span>Use the sidebar to add {{ modeLabel }}</span>
     </div>
@@ -167,14 +167,14 @@
     <div class="zoom-controls">
       <button @click="adjustZoom(0.1)">+</button>
       <span>{{ Math.round(zoom * 100) }}%</span>
-      <button @click="adjustZoom(-0.1)">−</button>
-      <button @click="resetView" title="Reset view">⊙</button>
+      <button @click="adjustZoom(-0.1)">-</button>
+      <button @click="resetView" title="Reset view">Reset</button>
     </div>
 
     <!-- Delete/relation bar -->
     <div v-if="store.selectedRelId" class="rel-bar">
       <span class="rel-bar-label">Relation selected</span>
-      <button class="rel-bar-del" @click="deleteSelectedRel">✕ Delete</button>
+      <button class="rel-bar-del" @click="deleteSelectedRel">Delete</button>
     </div>
   </div>
 </template>
@@ -182,6 +182,7 @@
 <script setup lang="ts">
 import { ref, computed, reactive, onMounted } from 'vue'
 import { useApiStore } from '../../../stores/api'
+import { useSchemaStore } from '../../../stores/schema'
 import EndpointNode from './EndpointNode.vue'
 import RestTypeNode from './RestTypeNode.vue'
 import GqlTypeNode  from './GqlTypeNode.vue'
@@ -214,7 +215,7 @@ const isEmpty = computed(() => {
   return store.fedNodes.length === 0 && store.fedServices.length === 0
 })
 
-// ── Drag types ────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Drag types Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 type DragMode = 'rest' | 'graphql' | 'federation'
 
@@ -230,14 +231,14 @@ type AnyDrag = (NodeDrag | NodeResize | ServiceDrag | SvcResize | PanDrag) & {
 
 const drag = ref<AnyDrag | null>(null)
 
-// ── Relation drawing ──────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Relation drawing Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 const drawingRel = ref<{
   fromNodeId: string; fromFieldId: string
   mouseX: number; mouseY: number
 } | null>(null)
 
-// ── Viewport helpers ──────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Viewport helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function toCanvas(cx: number, cy: number) {
   const r = canvasEl.value!.getBoundingClientRect()
@@ -255,7 +256,7 @@ function onWheel(e: WheelEvent) {
   adjustZoom(delta)
 }
 
-// ── Node geometry ─────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Node geometry Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function nodeRight(nodeId: string): { x: number; y: number; fieldY: (fid: string) => number } {
   const n = allNodes.value.find(n => n.id === nodeId)
@@ -290,14 +291,14 @@ const allNodes = computed(() => {
   return store.fedNodes as any[]
 })
 
-// ── Curve helpers ─────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Curve helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function curve(a: { x: number; y: number }, b: { x: number; y: number }) {
   const cx = Math.max(Math.abs(b.x - a.x) * 0.5, 80)
   return `M ${a.x} ${a.y} C ${a.x + cx} ${a.y}, ${b.x - cx} ${b.y}, ${b.x} ${b.y}`
 }
 
-// ── REST path ─────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ REST path Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function restRelPath(rel: RestRelation) {
   const src = nodeRight(rel.sourceId)
@@ -306,7 +307,7 @@ function restRelPath(rel: RestRelation) {
   return curve({ x: src.x, y: sy }, tgt)
 }
 
-// ── GQL paths ─────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ GQL paths Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function gqlRelPath(rel: GqlRelation) {
   const src = nodeRight(rel.sourceId)
@@ -326,7 +327,7 @@ function gqlRelMidY(rel: GqlRelation) {
   return (src.y + tgt.y) / 2 - 6
 }
 
-// ── Federation paths ──────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Federation paths Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function fedRelPath(rel: FedRelation) {
   const src = nodeRight(rel.sourceTypeId)
@@ -335,7 +336,7 @@ function fedRelPath(rel: FedRelation) {
   return curve({ x: src.x, y: sy }, tgt)
 }
 
-// ── In-progress relation ──────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ In-progress relation Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 const drawingRelPath = computed(() => {
   if (!drawingRel.value) return ''
@@ -346,7 +347,7 @@ const drawingRelPath = computed(() => {
   return curve({ x: src.x, y: sy }, { x: drawingRel.value.mouseX, y: drawingRel.value.mouseY })
 })
 
-// ── Highlight sets ────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Highlight sets Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 const highlightedIds = computed(() => {
   if (!store.selectedRelId) return new Set<string>()
@@ -358,7 +359,7 @@ const highlightedIds = computed(() => {
   return new Set([rel.sourceId ?? rel.sourceTypeId, rel.targetId ?? rel.targetTypeId])
 })
 
-// ── Connected field sets ──────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Connected field sets Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 const gqlSourceCols = computed(() => {
   const m = new Map<string, Set<string>>()
@@ -408,7 +409,7 @@ const restConnectedFields = computed(() => {
   return m
 })
 
-// ── REST node prop helper ─────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ REST node prop helper Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function restNodeProps(node: RestNode) {
   return {
@@ -429,7 +430,7 @@ function fedTypeCountFor(serviceId: string) {
   return store.fedNodes.filter(n => n.serviceId === serviceId).length
 }
 
-// ── Mouse handlers ────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Mouse handlers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function onCanvasMouseDown(e: MouseEvent) {
   const target = e.target as HTMLElement
@@ -508,11 +509,89 @@ function endRelation(nodeId: string, fieldId: string) {
   }
 }
 
+function normalizeToken(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function singularize(value: string) {
+  if (value.endsWith('ies')) return `${value.slice(0, -3)}y`
+  if (value.endsWith('ses')) return value.slice(0, -2)
+  if (value.endsWith('s') && value.length > 1) return value.slice(0, -1)
+  return value
+}
+
+function routeCandidates(path: string) {
+  const segment = path
+    .split('?')[0]
+    .split('/')
+    .filter(Boolean)
+    .find(part => !part.startsWith(':') && !part.startsWith('{'))
+
+  if (!segment) return []
+
+  const normalized = normalizeToken(segment)
+  const singular = singularize(normalized)
+  return Array.from(new Set([normalized, singular]))
+}
+
+function tableCandidates(name: string) {
+  const normalized = normalizeToken(name)
+  const singular = singularize(normalized)
+  return new Set([normalized, singular])
+}
+
+function syncSchemaSelectionForRestNode(id: string) {
+  const node = store.restNodes.find(candidate => candidate.id === id)
+  if (!node) return
+
+  const tables = schemaStore.schema.tables
+  if (!tables.length) return
+
+  if (node.kind === 'type') {
+    const match = tables.find(table => tableCandidates(table.name).has(singularize(normalizeToken(node.name))))
+    if (match) {
+      schemaStore.selectedTableId = match.id
+      schemaStore.selectedRelationId = null
+      schemaStore.selectedGroupId = null
+    }
+    return
+  }
+
+  const typeRefs = [node.requestBodyRef, ...node.responses.map(response => response.bodyTypeRef)].filter(Boolean) as string[]
+  const linkedTypes = typeRefs
+    .map(typeId => store.restNodes.find(candidate => candidate.id === typeId && candidate.kind === 'type'))
+    .filter(Boolean)
+
+  for (const linkedType of linkedTypes) {
+    const match = tables.find(table => tableCandidates(table.name).has(singularize(normalizeToken((linkedType as any).name))))
+    if (match) {
+      schemaStore.selectedTableId = match.id
+      schemaStore.selectedRelationId = null
+      schemaStore.selectedGroupId = null
+      return
+    }
+  }
+
+  const routeNames = routeCandidates(node.path)
+  const routeMatch = tables.find(table => {
+    const candidates = tableCandidates(table.name)
+    return routeNames.some(name => candidates.has(name))
+  })
+
+  if (routeMatch) {
+    schemaStore.selectedTableId = routeMatch.id
+    schemaStore.selectedRelationId = null
+    schemaStore.selectedGroupId = null
+  }
+}
+
 function selectNode(id: string) {
-  store.selectedNodeId    = id
-  store.selectedRelId     = null
-  store.selectedGroupId   = null
+  store.selectedNodeId = id
+  store.selectedRelId = null
+  store.selectedGroupId = null
   store.selectedServiceId = null
+
+  if (store.mode === 'rest') syncSchemaSelectionForRestNode(id)
 }
 
 function allNodeById(id: string) {
@@ -589,7 +668,7 @@ function deleteSelectedRel() {
   if (store.mode === 'federation') store.deleteFedRelation(store.selectedRelId)
 }
 
-// ── Keyboard ──────────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ Keyboard Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 onMounted(() => {
   window.addEventListener('keydown', (e: KeyboardEvent) => {
@@ -613,11 +692,12 @@ onMounted(() => {
 <style scoped>
 .canvas-root {
   flex: 1; position: relative; overflow: hidden;
-  background: #0a0a0f;
+  background: linear-gradient(180deg, #090b10 0%, #0d1118 100%);
   background-image:
-    radial-gradient(circle, #1e1e2a 1.5px, transparent 1.5px),
-    radial-gradient(circle, #141420 1px, transparent 1px);
-  background-size: 32px 32px, 8px 8px;
+    radial-gradient(circle, rgba(62, 207, 142, 0.1) 1.2px, transparent 1.2px),
+    linear-gradient(rgba(62, 207, 142, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(62, 207, 142, 0.03) 1px, transparent 1px);
+  background-size: 28px 28px, 28px 28px, 28px 28px;
   cursor: default;
 }
 
@@ -677,3 +757,4 @@ onMounted(() => {
 }
 .rel-bar-del:hover { background: #EF444415; }
 </style>
+
