@@ -22,17 +22,23 @@
       <!-- Right-side global actions -->
       <div class="ws-right">
         <button
-          v-if="workspaceStore.active === 'db' || workspaceStore.active === 'query'"
+          v-if="workspaceStore.active === 'db'"
           class="ws-action-btn"
-          :title="workspaceStore.active === 'db' ? 'Export diagram as PNG' : 'Export query canvas as PNG'"
+          title="Export diagram as PNG"
           @click="exportPng('png')"
         >⤓ PNG</button>
         <button
-          v-if="workspaceStore.active === 'db' || workspaceStore.active === 'query'"
+          v-if="workspaceStore.active === 'db'"
           class="ws-action-btn"
-          :title="workspaceStore.active === 'db' ? 'Export diagram as JPG' : 'Export query canvas as JPG'"
+          title="Export diagram as JPG"
           @click="exportPng('jpg')"
         >⤓ JPG</button>
+        <button
+          v-if="workspaceStore.active === 'query'"
+          class="ws-action-btn"
+          title="Export SQL file"
+          @click="exportQuerySQL"
+        >⤓ .sql Export</button>
       </div>
     </div>
 
@@ -116,6 +122,16 @@ const apiStore = useApiStore()
 
 function switchWorkspace(ws: Workspace) {
   workspaceStore.setWorkspace(ws)
+}
+
+function exportQuerySQL() {
+  const blob = new Blob([queryStore.sql], { type: 'text/sql' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'query.sql'
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 watch(() => workspaceStore.active, () => {}, { immediate: true })

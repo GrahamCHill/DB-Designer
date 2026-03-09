@@ -111,21 +111,28 @@
     </div>
 
     <!-- ── SQL Preview panel ── -->
-    <div class="sql-panel" :class="{ expanded: sqlExpanded }">
-      <div class="sql-panel-header" @click="sqlExpanded = !sqlExpanded">
-        <span class="sql-panel-title">⌨ Live SQL</span>
-        <div class="sql-panel-actions" @click.stop>
+    <div class="sql-panel expanded">
+      <div class="sql-panel-header">
+        <span class="sql-panel-title">⌨ Live SQL Output</span>
+        <div class="sql-panel-actions">
+          <button class="sql-action-btn" @click="query.resetManualSql()" title="Reset to generated SQL">
+            ↺ Reset
+          </button>
           <button class="sql-action-btn" @click="copySQL" :title="copied ? 'Copied!' : 'Copy SQL'">
             {{ copied ? '✓' : '⎘' }} {{ copied ? 'Copied' : 'Copy' }}
           </button>
           <button class="sql-action-btn" @click="exportSQLFile" title="Export SQL file">
-            ⤓ Export
+            ⤓ .sql Export
           </button>
         </div>
-        <span class="sql-toggle">{{ sqlExpanded ? '▼' : '▲' }}</span>
       </div>
-      <div v-if="sqlExpanded" class="sql-body">
-        <pre class="sql-code">{{ query.sql }}</pre>
+      <div class="sql-body">
+        <textarea
+          class="sql-code-editor"
+          :value="query.sql"
+          @input="onSqlInput"
+          spellcheck="false"
+        ></textarea>
       </div>
     </div>
 
@@ -175,6 +182,11 @@ const contentStyle = computed(() => ({
 const selectedJoin = computed(() =>
   query.joins.find(j => j.id === query.selectedJoinId) ?? null
 )
+
+function onSqlInput(e: Event) {
+  const val = (e.target as HTMLTextAreaElement).value
+  query.sql = val
+}
 
 // ── Drag (pan + node) ─────────────────────────────────────────────────────────
 type Drag =
@@ -313,9 +325,13 @@ const drawingPath = computed(() => {
 
 // ── Copy SQL ──────────────────────────────────────────────────────────────────
 async function copySQL() {
-  await navigator.clipboard.writeText(query.sql)
-  copied.value = true
-  setTimeout(() => { copied.value = false }, 1800)
+  try {
+    await navigator.clipboard.writeText(query.sql)
+    copied.value = true
+    setTimeout(() => copied.value = false, 2000)
+  } catch (err) {
+    console.error('Failed to copy SQL:', err)
+  }
 }
 
 function exportSQLFile() {
@@ -422,26 +438,22 @@ function exportSQLFile() {
 
 /* ── SQL Panel ── */
 .sql-panel {
-  position: absolute; top: 20px; right: 20px; width: 400px;
-  background: #0d0d16f2; border: 1px solid #3B82F640;
-  border-radius: 12px; box-shadow: 0 8px 32px #000000a0;
-  backdrop-filter: blur(12px);
+  position: absolute; top: 20px; right: 20px; width: 450px;
+  background: #0d0d16; border: 1px solid #3B82F6;
+  border-radius: 12px; box-shadow: 0 8px 32px #000000;
   z-index: 1000;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: all;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  max-height: 85vh;
 }
-.sql-panel.expanded { max-height: 85vh; width: 450px; }
-.sql-panel:not(.expanded) { width: 140px; }
 
 .sql-panel-header {
   display: flex; align-items: center; gap: 10px; padding: 0 16px; height: 44px;
-  cursor: pointer; background: rgba(59, 130, 246, 0.05);
-  border-bottom: 1px solid transparent;
+  background: rgba(59, 130, 246, 0.05);
+  border-bottom: 1px solid #1e1e30;
 }
-.sql-panel.expanded .sql-panel-header { border-bottom-color: #1e1e30; }
 .sql-panel-title { font-size: 11px; font-weight: 700; color: #60A5FA; letter-spacing: 0.05em; flex: 1; text-transform: uppercase; }
 .sql-panel-actions { display: flex; align-items: center; gap: 8px; }
 .sql-action-btn {
@@ -453,7 +465,39 @@ function exportSQLFile() {
 .sql-action-btn:hover { background: rgba(59, 130, 246, 0.2); border-color: rgba(59, 130, 246, 0.4); }
 .sql-toggle { font-size: 10px; color: #4b5563; }
 
-.sql-body { flex: 1; overflow-y: auto; padding: 0; }
+.sql-body { flex: 1; overflow: hidden; padding: 16px; background: #0d0d16; }
+.sql-code-editor {
+  width: 100%;
+  height: 100%;
+  background: #0d0d16;
+  border: none;
+  color: #E2E8F0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  padding: 0;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 2;
+  display: block;
+}
+
+.sql-code-editor::-webkit-scrollbar {
+  width: 8px;
+}
+.sql-code-editor::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sql-code-editor::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+.sql-code-editor::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .sql-code {
   font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6;
   color: #E2E8F0; white-space: pre-wrap; word-break: break-all; tab-size: 2; background: none; margin: 0;

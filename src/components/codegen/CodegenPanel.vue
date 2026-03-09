@@ -47,6 +47,12 @@
           <label class="opt-row"><input type="checkbox" v-model="tsOpts.zodSchemas" /> Zod schemas</label>
         </div>
 
+        <!-- Rust options -->
+        <div class="cg-section" v-if="activeLang === 'rust'">
+          <div class="cg-label">Rust Options</div>
+          <div class="opt-info">Uses Serde + Chrono</div>
+        </div>
+
         <!-- Go options -->
         <div class="cg-section" v-if="activeLang === 'go'">
           <div class="cg-label">Go Options</div>
@@ -127,10 +133,15 @@ const wsStore = useWorkspaceStore()
 const languages = [
   { id: 'typescript', label: 'TypeScript', icon: 'TS' },
   { id: 'go',         label: 'Go',         icon: 'Go' },
+  { id: 'rust',       label: 'Rust',       icon: 'Rs' },
   { id: 'python',     label: 'Python',     icon: 'Py' },
+  { id: 'java',       label: 'Java',       icon: 'Ja' },
+  { id: 'kotlin',     label: 'Kotlin',     icon: 'Kt' },
+  { id: 'csharp',     label: 'C#',         icon: 'C#' },
+  { id: 'cpp',        label: 'C++',        icon: 'C+' },
 ]
 
-const activeLang  = ref<'typescript' | 'go' | 'python'>('typescript')
+const activeLang  = ref<'typescript' | 'go' | 'rust' | 'python' | 'java' | 'kotlin' | 'csharp' | 'cpp'>('typescript')
 const activeLangLabel = computed(() => languages.find(l => l.id === activeLang.value)?.label ?? '')
 
 // ── Options ────────────────────────────────────────────────────────────────────
@@ -250,6 +261,65 @@ function pyType(col: SchemaColumn): string {
     : 'str'
   if (col.nullable && pyOpts.optionalNulls) return `Optional[${base}]`
   return base
+}
+
+function rustType(col: SchemaColumn): string {
+  const t = (col.type ?? '').toLowerCase()
+  let base =
+    t.includes('bigint') || t.includes('bigserial') ? 'i64'
+    : t.includes('int') || t.includes('serial') ? 'i32'
+    : t.includes('float') || t.includes('double') || t.includes('real') ? 'f64'
+    : t.includes('decimal') || t.includes('numeric') ? 'f64'
+    : t.includes('bool') ? 'bool'
+    : t.includes('json') ? 'serde_json::Value'
+    : t.includes('date') || t.includes('time') || t.includes('timestamp') ? 'chrono::NaiveDateTime'
+    : 'String'
+  if (col.nullable) return `Option<${base}>`
+  return base
+}
+
+function javaType(col: SchemaColumn): string {
+  const t = (col.type ?? '').toLowerCase()
+  if (col.nullable) {
+    return t.includes('bigint') || t.includes('bigserial') ? 'Long'
+      : t.includes('int') || t.includes('serial') ? 'Integer'
+      : t.includes('float') || t.includes('real') ? 'Float'
+      : t.includes('double') || t.includes('decimal') || t.includes('numeric') ? 'Double'
+      : t.includes('bool') ? 'Boolean'
+      : t.includes('date') || t.includes('time') || t.includes('timestamp') ? 'LocalDateTime'
+      : 'String'
+  }
+  return t.includes('bigint') || t.includes('bigserial') ? 'long'
+    : t.includes('int') || t.includes('serial') ? 'int'
+    : t.includes('float') || t.includes('real') ? 'float'
+    : t.includes('double') || t.includes('decimal') || t.includes('numeric') ? 'double'
+    : t.includes('bool') ? 'boolean'
+    : t.includes('date') || t.includes('time') || t.includes('timestamp') ? 'LocalDateTime'
+    : 'String'
+}
+
+function csType(col: SchemaColumn): string {
+  const t = (col.type ?? '').toLowerCase()
+  let base =
+    t.includes('bigint') || t.includes('bigserial') ? 'long'
+    : t.includes('int') || t.includes('serial') ? 'int'
+    : t.includes('float') || t.includes('real') ? 'float'
+    : t.includes('double') || t.includes('decimal') || t.includes('numeric') ? 'double'
+    : t.includes('bool') ? 'bool'
+    : t.includes('date') || t.includes('time') || t.includes('timestamp') ? 'DateTime'
+    : 'string'
+  if (col.nullable && base !== 'string') return `${base}?`
+  return base
+}
+
+function cppType(col: SchemaColumn): string {
+  const t = (col.type ?? '').toLowerCase()
+  return t.includes('bigint') || t.includes('bigserial') ? 'long long'
+    : t.includes('int') || t.includes('serial') ? 'int'
+    : t.includes('float') || t.includes('real') ? 'float'
+    : t.includes('double') || t.includes('decimal') || t.includes('numeric') ? 'double'
+    : t.includes('bool') ? 'bool'
+    : 'std::string'
 }
 
 // ── Code generators ────────────────────────────────────────────────────────────
@@ -421,6 +491,105 @@ function genPython(tables: SchemaTable[]): string {
   return chunks.join('\n')
 }
 
+function genRust(tables: SchemaTable[]): string {
+  const chunks: string[] = []
+  chunks.push('use serde::{Serialize, Deserialize};\n')
+
+  const needsChrono = tables.some(t => t.columns.some(c => {
+    const type = (c.type ?? '').toLowerCase()
+    return type.includes('date') || type.includes('time') || type.includes('timestamp')
+  }))
+  if (needsChrono) chunks.push('use chrono::{NaiveDateTime};\n')
+
+  for (const table of tables) {
+    const structName = toPascal(table.name)
+    chunks.push(`#[derive(Debug, Serialize, Deserialize)]`)
+    chunks.push(`pub struct ${structName} {`)
+    for (const col of table.columns) {
+      chunks.push(`    pub ${col.name}: ${rustType(col)},`)
+    }
+    chunks.push('}\n')
+  }
+  return chunks.join('\n')
+}
+
+function genJava(tables: SchemaTable[]): string {
+  const chunks: string[] = []
+  chunks.push('import java.time.LocalDateTime;')
+  chunks.push('import java.util.*;\n')
+
+  for (const table of tables) {
+    const className = toPascal(table.name)
+    chunks.push(`public class ${className} {`)
+    for (const col of table.columns) {
+      chunks.push(`    private ${javaType(col)} ${col.name};`)
+    }
+    chunks.push('\n    public ' + className + '() {}')
+    // Getters/Setters
+    for (const col of table.columns) {
+      const field = col.name
+      const pascal = toPascal(field)
+      const type = javaType(col)
+      chunks.push(`\n    public ${type} get${pascal}() { return this.${field}; }`)
+      chunks.push(`    public void set${pascal}(${type} ${field}) { this.${field} = ${field}; }`)
+    }
+    chunks.push('}\n')
+  }
+  return chunks.join('\n')
+}
+
+function genKotlin(tables: SchemaTable[]): string {
+  const chunks: string[] = []
+  chunks.push('import java.time.LocalDateTime\n')
+  for (const table of tables) {
+    const className = toPascal(table.name)
+    chunks.push(`data class ${className}(`)
+    for (const col of table.columns) {
+      const type = javaType(col) // Use java types as proxy for simple mapping
+      const ktType = type === 'Integer' ? 'Int' : type === 'LocalDateTime' ? 'LocalDateTime' : type === 'String' ? 'String' : type.charAt(0).toUpperCase() + type.slice(1)
+      const nullable = col.nullable ? '?' : ''
+      chunks.push(`    val ${col.name}: ${ktType}${nullable},`)
+    }
+    chunks.push(')\n')
+  }
+  return chunks.join('\n')
+}
+
+function genCSharp(tables: SchemaTable[]): string {
+  const chunks: string[] = []
+  chunks.push('using System;')
+  chunks.push('using System.Collections.Generic;\n')
+  chunks.push('namespace Models\n{')
+  for (const table of tables) {
+    const className = toPascal(table.name)
+    chunks.push(`    public class ${className}`)
+    chunks.push('    {')
+    for (const col of table.columns) {
+      const type = csType(col)
+      const pascal = toPascal(col.name)
+      chunks.push(`        public ${type} ${pascal} { get; set; }`)
+    }
+    chunks.push('    }\n')
+  }
+  chunks.push('}')
+  return chunks.join('\n')
+}
+
+function genCpp(tables: SchemaTable[]): string {
+  const chunks: string[] = []
+  chunks.push('#include <string>')
+  chunks.push('#include <vector>\n')
+  for (const table of tables) {
+    const structName = toPascal(table.name)
+    chunks.push(`struct ${structName} {`)
+    for (const col of table.columns) {
+      chunks.push(`    ${cppType(col)} ${col.name};`)
+    }
+    chunks.push('};\n')
+  }
+  return chunks.join('\n')
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 function toPascal(s: string) { return s.replace(/(^|_|-)(\w)/g, (_, __, c) => c.toUpperCase()) }
 function toCamel(s: string)  { const p = toPascal(s); return p[0].toLowerCase() + p.slice(1) }
@@ -432,7 +601,12 @@ function getCode(tableName: string): string {
   switch (activeLang.value) {
     case 'typescript': return genTypeScript(tables)
     case 'go':         return genGo(tables)
+    case 'rust':       return genRust(tables)
     case 'python':     return genPython(tables)
+    case 'java':       return genJava(tables)
+    case 'kotlin':     return genKotlin(tables)
+    case 'csharp':     return genCSharp(tables)
+    case 'cpp':        return genCpp(tables)
   }
 }
 
@@ -442,7 +616,12 @@ function getAllCode(): string {
   switch (activeLang.value) {
     case 'typescript': return genTypeScript(filteredTables.value)
     case 'go':         return genGo(filteredTables.value)
+    case 'rust':       return genRust(filteredTables.value)
     case 'python':     return genPython(filteredTables.value)
+    case 'java':       return genJava(filteredTables.value)
+    case 'kotlin':     return genKotlin(filteredTables.value)
+    case 'csharp':     return genCSharp(filteredTables.value)
+    case 'cpp':        return genCpp(filteredTables.value)
   }
 }
 
@@ -455,7 +634,17 @@ async function copyAll() {
 }
 
 function downloadAll() {
-  const ext = activeLang.value === 'typescript' ? 'ts' : activeLang.value === 'go' ? 'go' : 'py'
+  let ext = 'txt'
+  switch (activeLang.value) {
+    case 'typescript': ext = 'ts'; break
+    case 'go':         ext = 'go'; break
+    case 'rust':       ext = 'rs'; break
+    case 'python':     ext = 'py'; break
+    case 'java':       ext = 'java'; break
+    case 'kotlin':     ext = 'kt'; break
+    case 'csharp':     ext = 'cs'; break
+    case 'cpp':        ext = 'cpp'; break
+  }
   const blob = new Blob([getAllCode()], { type: 'text/plain' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
@@ -532,6 +721,7 @@ function downloadAll() {
 .opt-row { display: flex; align-items: center; gap: 7px; font-size: 11px; color: #888; margin-bottom: 5px; cursor: pointer; }
 .opt-row input[type="checkbox"] { accent-color: #3ECF8E; }
 .opt-row span { color: #666; }
+.opt-info { font-size: 10px; color: #555; font-style: italic; }
 .pkg-input { flex: 1; background: #18181f; border: 1px solid #252535; border-radius: 4px; color: #aaa; font-size: 10px; padding: 3px 6px; font-family: 'JetBrains Mono', monospace; outline: none; }
 
 /* Table list */
