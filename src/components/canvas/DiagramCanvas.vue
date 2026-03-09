@@ -111,7 +111,7 @@
     </div>
 
     <!-- Minimap -->
-    <MinimapPanel :pan="pan" :zoom="zoom" :viewport-w="canvasW" :viewport-h="canvasH"
+    <MinimapPanel v-if="store.showMinimap && !readOnly" :pan="pan" :zoom="zoom" :viewport-w="canvasW" :viewport-h="canvasH"
       @navigate="onMinimapNavigate" />
 
     <!-- Group editor modal -->

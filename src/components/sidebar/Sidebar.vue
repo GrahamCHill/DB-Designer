@@ -32,6 +32,16 @@
       </button>
     </div>
 
+    <!-- View options -->
+    <div class="sidebar-section">
+      <div class="view-options">
+        <label class="view-option">
+          <input type="checkbox" v-model="store.showMinimap" />
+          <span>Show Minimap</span>
+        </label>
+      </div>
+    </div>
+
     <!-- Groups — each is a drop zone, highlights when a table is dragged over -->
     <div v-if="store.schema.groups.length > 0" class="sidebar-section">
       <label class="section-label">Groups ({{ store.schema.groups.length }})</label>
@@ -604,4 +614,27 @@ function loadFile(e: Event) {
 
 .sidebar-footer { padding: 8px 14px; border-top: 1px solid #181820; display: flex; justify-content: flex-end; }
 .autosave-indicator { font-size: 10px; color: #3ECF8E50; letter-spacing: 0.02em; }
+
+.view-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0;
+}
+.view-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #ccc;
+  user-select: none;
+}
+.view-option input {
+  cursor: pointer;
+  accent-color: #3ECF8E;
+}
+.view-option:hover {
+  color: #fff;
+}
 </style>

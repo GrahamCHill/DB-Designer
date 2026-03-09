@@ -103,6 +103,45 @@
       </div>
     </div>
 
+    <!-- ── Summary Node (on canvas) ── -->
+    <div class="qcanvas-content" :style="contentStyle">
+      <div v-if="query.tables.length > 0" class="query-summary-node"
+        @mousedown.stop="startDrag('query-summary', $event)"
+        :style="{
+          left: summaryPos.x + 'px',
+          top:  summaryPos.y + 'px'
+        }">
+        <div class="qsn-header">
+          <span class="qsn-icon">📜</span>
+          <span class="qsn-title">Query Summary</span>
+        </div>
+        <div class="qsn-body">
+          <div class="qsn-section">
+            <div class="qsn-label">SELECT</div>
+            <div class="qsn-val">{{ selectSummary }}</div>
+          </div>
+          <div v-if="query.joins.length" class="qsn-section">
+            <div class="qsn-label">JOINs</div>
+            <div class="qsn-val">{{ query.joins.length }} relations</div>
+          </div>
+          <div v-if="query.wheres.length" class="qsn-section">
+            <div class="qsn-label">WHERE</div>
+            <div v-for="w in query.wheres" :key="w.id" class="qsn-clause">
+              {{ w.tableAlias }}.{{ w.column }} {{ w.op }} {{ w.value }}
+            </div>
+          </div>
+          <div v-if="query.groups.length" class="qsn-section">
+            <div class="qsn-label">GROUP BY</div>
+            <div class="qsn-val">{{ groupSummary }}</div>
+          </div>
+          <div v-if="query.orders.length" class="qsn-section">
+            <div class="qsn-label">ORDER BY</div>
+            <div class="qsn-val">{{ orderSummary }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Empty state -->
     <div v-if="query.tables.length === 0" class="qempty">
       <div class="qempty-icon">⊞</div>
@@ -111,10 +150,10 @@
     </div>
 
     <!-- ── SQL Preview panel ── -->
-    <div class="sql-panel expanded">
-      <div class="sql-panel-header">
+    <div class="sql-panel" :class="{ expanded: sqlExpanded }">
+      <div class="sql-panel-header" @click="sqlExpanded = !sqlExpanded" style="cursor: pointer">
         <span class="sql-panel-title">⌨ Live SQL Output</span>
-        <div class="sql-panel-actions">
+        <div class="sql-panel-actions" @click.stop>
           <button class="sql-action-btn" @click="query.resetManualSql()" title="Reset to generated SQL">
             ↺ Reset
           </button>
@@ -127,11 +166,18 @@
         </div>
       </div>
       <div class="sql-body">
+        <div class="sql-code-display" v-if="!isEditingSql" @click="isEditingSql = true">
+          {{ query.sql }}
+        </div>
         <textarea
+          v-else
+          id="sql-editor"
+          name="sql-editor"
           class="sql-code-editor"
-          :value="query.sql"
-          @input="onSqlInput"
+          v-model="query.sql"
           spellcheck="false"
+          @blur="isEditingSql = false"
+          ref="sqlEditorRef"
         ></textarea>
       </div>
     </div>
@@ -158,13 +204,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import { useQueryStore } from '../../stores/query'
 import { useSchemaStore } from '../../stores/schema'
 import type { QJoin, QTable } from '../../stores/query'
 
 const query   = useQueryStore()
 const dbStore = useSchemaStore()
+
+// Debugging visibility
+onMounted(() => {
+  console.log('QueryCanvas mounted. SQL length:', query.sql.length)
+})
+watch(() => query.sql, (newSql) => {
+  console.log('SQL updated, length:', newSql.length)
+})
 
 const canvasEl   = ref<HTMLDivElement>()
 const zoom       = ref(1)
@@ -173,6 +227,23 @@ const sqlExpanded = ref(true)
 const copied      = ref(false)
 const dialect     = ref('postgresql')
 const joinTypes   = ['INNER','LEFT','RIGHT','FULL'] as const
+const summaryPos  = reactive({ x: 400, y: 100 })
+const isEditingSql = ref(false)
+const sqlEditorRef = ref<HTMLTextAreaElement | null>(null)
+
+watch(isEditingSql, (editing) => {
+  if (editing) {
+    setTimeout(() => sqlEditorRef.value?.focus(), 50)
+  }
+})
+
+const selectSummary = computed(() => {
+  const cols = query.tables.flatMap(t => t.columns.filter(c => c.selected))
+  if (cols.length === 0) return '*'
+  return cols.length + ' columns selected'
+})
+const groupSummary = computed(() => query.groups.length + ' group(s)')
+const orderSummary = computed(() => query.orders.length + ' order(s)')
 
 const contentStyle = computed(() => ({
   transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom.value})`,
@@ -202,13 +273,19 @@ function toCanvas(cx: number, cy: number) {
 
 function onCanvasMouseDown(e: MouseEvent) {
   const t = e.target as HTMLElement
-  if (t === canvasEl.value || t.classList.contains('qcanvas-content') || t.classList.contains('joins-svg')) {
+  if (t.closest('.sql-panel') || t.closest('.join-inspector') || t.closest('.zoom-controls')) return
+  if (t === canvasEl.value || t.classList.contains('qcanvas-content') || t.classList.contains('joins-svg') || t.classList.contains('qcanvas-root')) {
     query.selectedTableId = null; query.selectedJoinId = null
     drag.value = { kind: 'pan', sx: e.clientX, sy: e.clientY }
   }
 }
 
 function startDrag(id: string, e: MouseEvent) {
+  if ((e.target as HTMLElement).closest('.sql-panel')) return
+  if (id === 'query-summary') {
+    drag.value = { kind: 'node', id, ox: summaryPos.x, oy: summaryPos.y, sx: e.clientX, sy: e.clientY }
+    return
+  }
   const t = query.tables.find(t => t.id === id)
   if (!t) return
   drag.value = { kind: 'node', id, ox: t.position.x, oy: t.position.y, sx: e.clientX, sy: e.clientY }
@@ -229,7 +306,12 @@ function onMouseMove(e: MouseEvent) {
   } else if (d.kind === 'node') {
     const dx = (e.clientX - d.sx) / zoom.value
     const dy = (e.clientY - d.sy) / zoom.value
-    query.updateTablePosition(d.id, { x: d.ox + dx, y: d.oy + dy })
+    if (d.id === 'query-summary') {
+      summaryPos.x = d.ox + dx
+      summaryPos.y = d.oy + dy
+    } else {
+      query.updateTablePosition(d.id, { x: d.ox + dx, y: d.oy + dy })
+    }
   }
 }
 
@@ -239,6 +321,7 @@ function onMouseUp() {
 }
 
 function onWheel(e: WheelEvent) {
+  if ((e.target as HTMLElement).closest('.sql-panel')) return
   adjustZoom(e.deltaY > 0 ? -0.08 : 0.08)
 }
 
@@ -439,6 +522,7 @@ function exportSQLFile() {
 /* ── SQL Panel ── */
 .sql-panel {
   position: absolute; top: 20px; right: 20px; width: 450px;
+  max-height: 85vh;
   background: #0d0d16; border: 1px solid #3B82F6;
   border-radius: 12px; box-shadow: 0 8px 32px #000000;
   z-index: 1000;
@@ -446,7 +530,16 @@ function exportSQLFile() {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  max-height: 85vh;
+  transition: height 0.2s ease;
+}
+
+.sql-panel.expanded {
+  height: 500px !important;
+  max-height: 85vh !important;
+}
+
+.sql-panel:not(.expanded) {
+  height: 44px !important;
 }
 
 .sql-panel-header {
@@ -465,23 +558,49 @@ function exportSQLFile() {
 .sql-action-btn:hover { background: rgba(59, 130, 246, 0.2); border-color: rgba(59, 130, 246, 0.4); }
 .sql-toggle { font-size: 10px; color: #4b5563; }
 
-.sql-body { flex: 1; overflow: hidden; padding: 16px; background: #0d0d16; }
+.sql-body {
+  flex: 1;
+  overflow: hidden;
+  padding: 16px;
+  background: #0d0d16;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0;
+}
 .sql-code-editor {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 200px !important;
+  background: #0d0d16 !important;
+  border: none !important;
+  color: #E2E8F0 !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+  resize: none !important;
+  outline: none !important;
+  padding: 0 !important;
+  white-space: pre !important;
+  overflow: auto !important;
+  tab-size: 2 !important;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.sql-code-display {
   width: 100%;
   height: 100%;
+  min-height: 200px;
   background: #0d0d16;
-  border: none;
   color: #E2E8F0;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
-  line-height: 1.5;
-  resize: none;
-  outline: none;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-y: auto;
+  cursor: text;
   padding: 0;
-  white-space: pre;
-  overflow: auto;
-  tab-size: 2;
-  display: block;
 }
 
 .sql-code-editor::-webkit-scrollbar {
@@ -536,4 +655,41 @@ function exportSQLFile() {
 }
 .zoom-controls button:hover { color: #e0e0e0; background: #1e1e28; }
 .zoom-controls span { font-size: 11px; color: #555; min-width: 36px; text-align: center; font-family: 'JetBrains Mono', monospace; }
+
+/* ── Query Summary Node ── */
+.query-summary-node {
+  position: absolute;
+  width: 240px;
+  background: #131320;
+  border: 1px solid #3B82F6;
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+  z-index: 50;
+  cursor: grab;
+  overflow: hidden;
+}
+.query-summary-node:active { cursor: grabbing; }
+.qsn-header {
+  background: linear-gradient(135deg, #1e3a8a 0%, #1e1b4b 100%);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #3B82F640;
+}
+.qsn-icon { font-size: 14px; }
+.qsn-title { font-size: 12px; font-weight: 700; color: #fff; text-transform: uppercase; letter-spacing: 0.05em; }
+.qsn-body { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+.qsn-section { display: flex; flex-direction: column; gap: 4px; }
+.qsn-label { font-size: 10px; font-weight: 700; color: #3B82F6; text-transform: uppercase; }
+.qsn-val { font-size: 11px; color: #e2e8f0; font-family: 'JetBrains Mono', monospace; }
+.qsn-clause {
+  font-size: 11px;
+  color: #94a3b8;
+  background: #1e1e30;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  word-break: break-all;
+}
 </style>

@@ -230,10 +230,12 @@ export const useQueryStore = defineStore('query', () => {
   const manualSql = ref<string | null>(null)
   const sql = computed({
     get: () => {
+      console.log('SQL Getter called. Tables:', tables.value.length, 'ManualSql:', manualSql.value !== null)
       if (manualSql.value !== null) return manualSql.value
-      if (tables.value.length === 0) return '-- Drag tables onto the canvas to start'
+      if (tables.value.length === 0) return '-- Drag tables onto the canvas to start designing your query'
 
       const lines: string[] = []
+      lines.push('-- Generated SQL Query')
 
       // SELECT
       const selectedCols = tables.value.flatMap(t =>
@@ -250,9 +252,11 @@ export const useQueryStore = defineStore('query', () => {
       lines.push(selectBody)
 
       // FROM
-      const base = tables.value[0]
-      const baseRef = base.schemaTable === base.alias ? base.alias : `${base.schemaTable} AS ${base.alias}`
-      lines.push(`FROM ${baseRef}`)
+      if (tables.value.length > 0) {
+        const base = tables.value[0]
+        const baseRef = base.schemaTable === base.alias ? base.alias : `${base.schemaTable} AS ${base.alias}`
+        lines.push(`FROM ${baseRef}`)
+      }
 
       // JOINs
       for (const join of joins.value) {
