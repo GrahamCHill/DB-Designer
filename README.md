@@ -167,16 +167,17 @@ What exists now:
 - connection modal for PostgreSQL, MySQL, SQLite, and SQL Server
 - connection testing UI flow
 - SQLite file browse flow through the Tauri dialog plugin
-- Rust-side PostgreSQL schema import logic
-- Rust-side SQLite schema import logic
+- Tauri command registration for `db_test_connection` and `db_import_schema`
+- Rust-side connection test support for PostgreSQL, SQLite, MySQL, and SQL Server
+- Rust-side schema import support for PostgreSQL, SQLite, MySQL, and SQL Server
 - type normalization into the internal schema model
 - automatic visual placement of imported tables
-- PostgreSQL foreign-key extraction
+- foreign-key extraction for imported PostgreSQL, SQLite, MySQL, and SQL Server schemas
 
-Important current limitation:
+Current note:
 
-- the Tauri commands are registered, but backend support is currently implemented for PostgreSQL and SQLite paths in `src-tauri/src/db.rs`
-- the UI exposes MySQL and SQL Server options, so those paths should be treated as incomplete until corresponding backend support is added
+- the Rust backend database integrations are implemented and the backend currently builds successfully
+- the remaining validation work is functional testing against real sample databases for each supported dialect
 
 ## Example Workflow
 
@@ -281,7 +282,7 @@ src-tauri/
 
 This project is already broad and feature-rich on the frontend side. The ERD, API, query, and codegen workflows are all present and connected through shared state. Export generation is also already substantial.
 
-The main unfinished area is breadth of native database integration. The Tauri command wiring is in place and PostgreSQL/SQLite import logic exists, but the UI currently exposes more dialect options than the backend fully supports. Because of that, some database workflows are only partially complete end-to-end in the desktop app.
+The native database integration is now wired through Tauri and implemented across PostgreSQL, SQLite, MySQL, and SQL Server in the Rust backend. The main remaining work in this area is end-to-end validation against real sample databases and any follow-up polishing that comes out of that testing.
 
 ## Contributing
 
@@ -298,4 +299,5 @@ A good contribution rule for this repository is: keep the README and the UI hone
 ## License
 
 No license file is currently present in this repository. If you want to distribute or open-source the project, add an explicit license so usage terms are clear.
+
 
