@@ -270,14 +270,15 @@ const contentStyle = computed(() => ({
 
 const selectedJoin = computed(() => query.joins.find((join) => join.id === query.selectedJoinId) ?? null)
 const selectedJoinTables = computed(() => {
-  if (!selectedJoin.value) return { source: '', target: '' }
+  const join = selectedJoin.value
+  if (!join) return { source: '', target: '' }
 
-  const sourceTable = query.tables.find((table) => table.id === selectedJoin.value.leftTableId)
-  const targetTable = query.tables.find((table) => table.id === selectedJoin.value.rightTableId)
+  const sourceTable = query.tables.find((table) => table.id === join.leftTableId)
+  const targetTable = query.tables.find((table) => table.id === join.rightTableId)
 
   return {
-    source: sourceTable?.alias ?? selectedJoin.value.leftTableId,
-    target: targetTable?.alias ?? selectedJoin.value.rightTableId,
+    source: sourceTable?.alias ?? join.leftTableId,
+    target: targetTable?.alias ?? join.rightTableId,
   }
 })
 type Drag =

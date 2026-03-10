@@ -86,7 +86,7 @@
 
     <!-- Empty state -->
     <div v-if="store.schema.tables.length === 0 && store.schema.groups.length === 0" class="empty-state">
-      <div class="empty-hex">⬡</div>
+      <div class="empty-hex">â¬¡</div>
       <p>Canvas is empty</p>
       <span>Use the sidebar to add tables or groups</span>
     </div>
@@ -99,15 +99,15 @@
         @click="store.updateRelation(store.selectedRelationId!, { type: type.value })">
         {{ type.label }}
       </button>
-      <button class="rel-type-del" @click="store.deleteRelation(store.selectedRelationId!)">✕ Delete</button>
+      <button class="rel-type-del" @click="store.deleteRelation(store.selectedRelationId!)">âœ• Delete</button>
     </div>
 
     <!-- Zoom controls -->
     <div class="zoom-controls">
       <button @click="adjustZoom(0.1)">+</button>
       <span>{{ Math.round(zoom * 100) }}%</span>
-      <button @click="adjustZoom(-0.1)">−</button>
-      <button @click="resetView" title="Reset view">⊙</button>
+      <button @click="adjustZoom(-0.1)">âˆ’</button>
+      <button @click="resetView" title="Reset view">âŠ™</button>
     </div>
 
     <!-- Minimap -->
@@ -134,7 +134,7 @@ import type { Relation, RelationType } from '../../types'
 import { TABLE_WIDTH, TABLE_HEADER_H, TABLE_COL_PAD_TOP, TABLE_ROW_H } from '../../types'
 import { getDescendants } from '../../composables/useContainment'
 
-const props = defineProps<{
+defineProps<{
   readOnly?: boolean
   interactive?: boolean
 }>()
@@ -145,7 +145,7 @@ const canvasEl = ref<HTMLDivElement>()
 const canvasW  = ref(800)
 const canvasH  = ref(600)
 
-const emit = defineEmits<{
+defineEmits<{
   'generate-api': [table: any]
 }>()
 
@@ -165,7 +165,7 @@ onMounted(() => {
     }
   }
   window.addEventListener('keydown', onKeyDown)
-  // Clean up on unmount would need onUnmounted — skipping for now as canvas lives for app lifetime
+  // Clean up on unmount would need onUnmounted â€” skipping for now as canvas lives for app lifetime
 
   if (canvasEl.value && typeof ResizeObserver !== 'undefined') {
     const ro = new ResizeObserver(entries => {
@@ -184,7 +184,7 @@ const REL_TYPES: { value: RelationType; label: string }[] = [
   { value: 'many-to-many', label: 'N : M' },
 ]
 
-// ── Viewport ─────────────────────────────────────────────────────────────────
+// â”€â”€ Viewport â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const zoom = ref(1)
 const pan  = reactive({ x: 40, y: 40 })
 
@@ -193,7 +193,7 @@ const contentStyle = computed(() => ({
   transformOrigin: '0 0',
 }))
 
-// ── Group render order ────────────────────────────────────────────────────────
+// â”€â”€ Group render order â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Largest area first (painted behind), smallest last (painted in front / on top)
 const sortedGroups = computed(() =>
   [...store.schema.groups].sort((a, b) => (b.size.w * b.size.h) - (a.size.w * a.size.h))
@@ -214,7 +214,7 @@ function groupDepth(groupId: string): number {
   return depth
 }
 
-// ── Drag types ────────────────────────────────────────────────────────────────
+// â”€â”€ Drag types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 type TableDrag = {
   kind: 'table'
   id: string
@@ -231,12 +231,12 @@ type GroupDrag = {
   kind: 'group'
   id: string
   origX: number; origY: number
-  // Snapshot taken at drag-start — used for steal-prevention
+  // Snapshot taken at drag-start â€” used for steal-prevention
   ownedTablesBefore: Set<string>       // all table IDs in this group's subtree
   ownedGroupsBefore: Set<string>       // direct child group IDs
   // Positions snapshotted so descendant groups & tables move rigidly
-  subtreeGroupOrigPos: Record<string, { x: number; y: number }>  // descendant group id → orig pos
-  subtreeTableOrigPos: Record<string, { x: number; y: number }>  // table id → orig pos
+  subtreeGroupOrigPos: Record<string, { x: number; y: number }>  // descendant group id â†’ orig pos
+  subtreeTableOrigPos: Record<string, { x: number; y: number }>  // table id â†’ orig pos
 }
 
 type ResizeDrag = {
@@ -254,13 +254,13 @@ type AnyDrag = (TableDrag | TableResizeDrag | GroupDrag | ResizeDrag | PanDrag) 
 
 const drag = ref<AnyDrag | null>(null)
 
-// ── Relation drawing ──────────────────────────────────────────────────────────
+// â”€â”€ Relation drawing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const drawingRel = ref<{
   fromTableId: string; fromColumnId: string
   side: 'right' | 'left'; mouseX: number; mouseY: number
 } | null>(null)
 
-// ── Geometry helpers ──────────────────────────────────────────────────────────
+// â”€â”€ Geometry helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function toCanvas(clientX: number, clientY: number) {
   const rect = canvasEl.value!.getBoundingClientRect()
@@ -351,7 +351,7 @@ const editingGroupData = computed(() =>
   store.schema.groups.find(g => g.id === store.editingGroupId) ?? null
 )
 
-// ── Canvas mouse down ─────────────────────────────────────────────────────────
+// â”€â”€ Canvas mouse down â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function onCanvasMouseDown(e: MouseEvent) {
   const target = e.target as HTMLElement
@@ -367,7 +367,7 @@ function onCanvasMouseDown(e: MouseEvent) {
   }
 }
 
-// ── Mouse move ────────────────────────────────────────────────────────────────
+// â”€â”€ Mouse move â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function onMouseMove(e: MouseEvent) {
   if (drawingRel.value) {
@@ -414,7 +414,7 @@ function onMouseMove(e: MouseEvent) {
   }
 }
 
-// ── Mouse up — commit containment ─────────────────────────────────────────────
+// â”€â”€ Mouse up â€” commit containment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function onMouseUp() {
   if (!drag.value) return
@@ -430,7 +430,7 @@ function onMouseUp() {
     store.commitTableWidth()
 
   } else if (d.kind === 'group') {
-    // S1: apply group drop — only reassigns owned items, never steals
+    // S1: apply group drop â€” only reassigns owned items, never steals
     store.commitGroupDrop(d.id, d.ownedTablesBefore, d.ownedGroupsBefore)
 
   } else if (d.kind === 'resize') {
@@ -439,7 +439,7 @@ function onMouseUp() {
   }
 }
 
-// ── Wheel ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Wheel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function onWheel(e: WheelEvent) {
   const delta  = e.deltaY > 0 ? -0.08 : 0.08
@@ -460,7 +460,7 @@ function resetView() { zoom.value = 1; pan.x = 40; pan.y = 40 }
 
 function onMinimapNavigate(x: number, y: number) { pan.x = x; pan.y = y }
 
-// ── Table drag ────────────────────────────────────────────────────────────────
+// â”€â”€ Table drag â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function startTableDrag(tableId: string, e: MouseEvent) {
   const table = store.schema.tables.find(t => t.id === tableId)!
@@ -488,7 +488,7 @@ function selectTable(id: string) {
   store.selectedGroupId    = null
 }
 
-// ── Group drag ────────────────────────────────────────────────────────────────
+// â”€â”€ Group drag â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function startGroupDrag(groupId: string, e: MouseEvent) {
   const group = store.schema.groups.find(g => g.id === groupId)!
@@ -505,7 +505,7 @@ function startGroupDrag(groupId: string, e: MouseEvent) {
     }
   }
 
-  // All group IDs in this subtree (including self) — used to find owned tables
+  // All group IDs in this subtree (including self) â€” used to find owned tables
   const subtreeIds = new Set([groupId, ...descGroupIds])
 
   // Snapshot table positions for every table in the subtree
@@ -539,7 +539,7 @@ function selectGroup(id: string) {
   store.selectedRelationId = null
 }
 
-// ── Group resize ──────────────────────────────────────────────────────────────
+// â”€â”€ Group resize â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function startGroupResize(groupId: string, e: MouseEvent) {
   const group = store.schema.groups.find(g => g.id === groupId)!
@@ -550,7 +550,7 @@ function startGroupResize(groupId: string, e: MouseEvent) {
   }
 }
 
-// ── Relation drawing ──────────────────────────────────────────────────────────
+// â”€â”€ Relation drawing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function startRelation(tableId: string, columnId: string) {
   const pos = connectorPos(tableId, columnId, 'right')
