@@ -1,85 +1,100 @@
 # DB Designer
 
-DB Designer is a desktop-first visual design tool for database schemas, API contracts, SQL query composition, and model code generation. It is built with Vue 3, TypeScript, Vite, Pinia, Vue Flow, and Tauri so the same project can feel like a rich web canvas while still supporting native desktop workflows.
+DB Designer is a desktop-first visual workspace for designing database schemas, modeling APIs, building SQL queries visually, and generating starter code from an ERD. The project combines a Vue 3 + TypeScript frontend with a Rust + Tauri desktop shell so it can support both canvas-heavy interaction and native desktop workflows.
 
-Instead of treating schema work as an isolated task, this project connects four related workflows in one app:
+It is designed for people who want more than a basic ERD editor. Instead of stopping at table design, DB Designer also helps you move into API planning, query composition, and model generation from the same source structure.
 
-- Design and organize relational schemas visually
-- Turn tables into REST or GraphQL starting points
-- Compose SQL queries on a canvas
-- Generate application models from the ERD
+## What You Can Do
 
-## Why This Project Exists
+With DB Designer, you can:
 
-Most database tools are strong in one area and weak in the others. DB Designer aims to give you one place to:
+- design relational schemas visually
+- organize tables into groups and nested groups
+- create relationships between columns
+- save and load schema files
+- export SQL from a visual model
+- use tables as input for REST, GraphQL, and Federation design
+- build SQL queries visually from schema tables
+- generate model code in multiple programming languages
+- export visual canvases as images
 
-- sketch an ERD quickly
-- group and reorganize tables visually
-- derive API shapes from the schema
-- experiment with joins before writing SQL manually
-- export code stubs for downstream application work
+## Main Workspaces
 
-## Core Workspaces
+### DB Schema Workspace
 
-### 1. DB Schema
+This is the core ERD workspace. It manages tables, columns, relations, groups, and schema tabs.
 
-The schema workspace is the heart of the app. It lets you create and edit tables, columns, relations, and nested table groups on a canvas.
-
-Current capabilities include:
+Features currently present in the codebase:
 
 - multi-tab schema editing
-- table creation with default ID columns
-- column metadata such as type, nullability, PK, uniqueness, default value, and comments
-- relation modeling between columns
-- draggable groups with containment behavior
-- group locking to keep table membership stable
+- schema naming per tab
+- table creation with default starter columns
+- column editing for type, nullability, PK, uniqueness, defaults, and comments
+- table width resizing
+- relation creation and removal
+- draggable table layout
+- nested table groups
+- group locking to prevent automatic reassignment
+- drag-and-drop group assignment from the sidebar
 - minimap support
-- JSON save/load using `.dbm.json`
+- schema save/load using `.dbm.json`
 - SQL export
-- canvas export to PNG or JPG
+- PNG/JPG canvas export
+- local persistence through browser storage
 
-### 2. API Designer
+### API Designer Workspace
 
-The API workspace layers API modeling on top of the schema thinking. It supports three modes:
+The API workspace lets the schema drive interface design. It supports three design modes:
 
 - REST
 - GraphQL
 - GraphQL Federation
 
-Highlights:
+Current capabilities include:
 
-- create REST endpoints and data types visually
-- create GraphQL types, roots, enums, unions, interfaces, and inputs
-- create federation services and service-owned types
-- bootstrap API nodes from database tables
-- export OpenAPI, SDL, resolver stubs, and subgraph boilerplate
+- switching between API design modes
+- REST endpoint node creation
+- REST type node creation
+- endpoint metadata such as method, path, params, request body, and responses
+- GraphQL type creation across several kinds, including roots, enums, interfaces, unions, and inputs
+- federation service creation
+- federation type modeling with entity and key-field support
+- visual relations between API nodes
+- grouping of API nodes
+- API project persistence in local storage
+- bootstrapping API nodes directly from database tables
+- keeping the ERD visible in the background while modeling APIs
 
-### 3. Query Builder
+### Query Builder Workspace
 
-The query workspace provides a visual SQL builder driven by selected schema tables.
+The query builder turns the schema into a visual SQL composition tool.
 
-It currently supports:
+Current capabilities include:
 
-- adding tables to a query canvas
-- join creation between columns
+- adding schema tables onto a query canvas
+- preventing duplicate additions of the same source table
+- per-table aliases
+- drag-based table positioning
+- visual join creation between columns
+- join type selection: `INNER`, `LEFT`, `RIGHT`, `FULL`
 - select column toggles
-- aggregates
-- aliases
-- where clauses
-- group by
-- order by
-- distinct
-- limit and offset
+- aggregate functions such as `COUNT`, `SUM`, `AVG`, `MIN`, and `MAX`
+- column aliases
+- where clause building
+- group by configuration
+- order by configuration
+- `DISTINCT`, `LIMIT`, and `OFFSET`
 - generated SQL preview
-- manual SQL override/reset
+- manual SQL override and reset
 - SQL file export
-- PNG/JPG canvas export
+- PNG/JPG export for the query canvas
+- automatic cleanup of joins/filters/orders/groups when tables are removed
 
-### 4. ERD to Code
+### ERD to Code Workspace
 
-The codegen workspace converts a schema into starter models and DTO-like structures.
+The codegen workspace generates starter data models from a schema.
 
-Current target languages:
+Supported output targets currently include:
 
 - TypeScript
 - Go
@@ -90,21 +105,100 @@ Current target languages:
 - C#
 - C++
 
-Several language-specific options are already supported, such as:
+Current options include:
 
-- TypeScript interfaces, classes, and optional Zod schemas
-- Go package name, tag generation, and nullable pointers
-- Python dataclass, Pydantic, and SQLAlchemy-style output
+- TypeScript interfaces
+- TypeScript classes
+- TypeScript optional nullable mapping
+- TypeScript Zod schema generation
+- Go package naming
+- Go `json` and `db` tags
+- Go pointer mapping for nullable fields
+- Python dataclass output
+- Python Pydantic output
+- Python SQLAlchemy-style output
+- Rust struct generation with Serde-friendly output
+- per-table preview tabs
+- selective table inclusion
+- copy-all output
+- downloadable generated files
+- loading an external schema file or using the current in-app schema
+
+## Export Support
+
+### Schema Workspace Exports
+
+- `.dbm.json`
+- SQL
+- PNG
+- JPG
+
+### API Workspace Exports
+
+- OpenAPI 3.0 JSON
+- TypeScript fetch client
+- JavaScript fetch client
+- Python FastAPI stubs
+- GraphQL SDL
+- GraphQL resolver stubs for TypeScript
+- GraphQL resolver stubs for JavaScript
+- Federation SDL
+- Apollo subgraph starter code for TypeScript
+- Apollo subgraph starter code for JavaScript
+
+### Query Workspace Exports
+
+- `.sql`
+- PNG
+- JPG
+
+### Codegen Workspace Exports
+
+- generated model code by selected language
+- clipboard copy
+- downloadable single-file output
+
+## Database Import Support
+
+The project already contains live database import plumbing in both the UI and Tauri backend.
+
+What exists now:
+
+- connection modal for PostgreSQL, MySQL, SQLite, and SQL Server
+- connection testing UI flow
+- SQLite file browse flow through the Tauri dialog plugin
+- Rust-side PostgreSQL schema import logic
+- Rust-side SQLite schema import logic
+- type normalization into the internal schema model
+- automatic visual placement of imported tables
+- PostgreSQL foreign-key extraction
+
+Important current limitation:
+
+- the Tauri commands are registered, but backend support is currently implemented for PostgreSQL and SQLite paths in `src-tauri/src/db.rs`
+- the UI exposes MySQL and SQL Server options, so those paths should be treated as incomplete until corresponding backend support is added
+
+## Example Workflow
+
+A realistic workflow in the app looks like this:
+
+1. Create or import a schema in the DB Schema workspace.
+2. Organize tables into groups and connect relationships.
+3. Switch to the API workspace and generate starter REST or GraphQL structures from tables.
+4. Move to the Query Builder workspace to prototype SQL queries using the same schema.
+5. Open ERD to Code and generate model code for your application layer.
+
+This is the main strength of the project: the schema is not treated as an isolated artifact.
 
 ## Tech Stack
 
-- Frontend: Vue 3 + TypeScript + Vite
-- State: Pinia
-- Canvas/diagramming: Vue Flow
+- Frontend: Vue 3, TypeScript, Vite
+- State management: Pinia
+- Canvas/graph interaction: Vue Flow
 - Desktop shell: Tauri 2
 - Native backend: Rust
-- Database access: SQLx
-- Styling: custom CSS with Tailwind tooling available in the project
+- Database layer: SQLx
+- Styling: custom CSS, with Tailwind tooling present in the project
 
 ## Getting Started
 
@@ -112,38 +206,38 @@ Several language-specific options are already supported, such as:
 
 You will need:
 
-- Node.js 18+ recommended
+- Node.js 18 or newer recommended
 - npm
 - Rust toolchain
-- Tauri system prerequisites for your OS
+- Tauri prerequisites for your operating system
 
-For Windows development, make sure the standard Tauri build dependencies are installed, including WebView2 and the Microsoft C++ build tools if your environment does not already have them.
+For Windows development, make sure the standard Tauri desktop requirements are available, including WebView2 and the relevant Microsoft C++ build tooling if they are not already installed.
 
-### Install
+### Install Dependencies
 
 ```bash
 npm install
 ```
 
-### Run In The Browser
+### Run The Frontend In The Browser
 
 ```bash
 npm run dev
 ```
 
-### Run As A Tauri Desktop App
+### Run The Desktop App In Development
 
 ```bash
 npm run tauri dev
 ```
 
-### Build Frontend Assets
+### Build The Frontend
 
 ```bash
 npm run build
 ```
 
-### Build Desktop App
+### Build The Desktop App
 
 ```bash
 npm run tauri build
@@ -155,7 +249,7 @@ npm run tauri build
 src/
   components/
     api-modals/        API editing dialogs
-    api-panels/        API overview + export panels
+    api-panels/        API overview and export panels
     api-sidebar/       API workspace controls
     canvas/            ERD and API visual canvases
     codegen/           ERD-to-code workspace
@@ -164,93 +258,44 @@ src/
     query-sidebar/     query builder controls
     sidebar/           schema workspace sidebar
   composables/         shared export and containment logic
-  stores/              Pinia stores for schema, API, query, tabs, workspace
-  types/               shared TypeScript models
+  stores/              Pinia stores for schema, API, query, tabs, and workspace state
+  types/               shared TypeScript domain models
 
 src-tauri/
   src/
-    db.rs              database import/test logic
-    lib.rs             Tauri app bootstrap
+    db.rs              database import and test logic
+    lib.rs             Tauri application bootstrap
     main.rs            native entrypoint
   tauri.conf.json      Tauri configuration
 ```
 
-## Development Scripts
+## Scripts
 
 - `npm run dev` starts the Vite dev server
 - `npm run build` type-checks and builds the frontend
-- `npm run preview` previews the frontend build
+- `npm run preview` previews the production frontend build
 - `npm run tauri dev` runs the desktop app in development
-- `npm run tauri build` creates a packaged desktop build
+- `npm run tauri build` packages the desktop app
 
 ## Current Status
 
-This project is already substantial and usable for local design workflows, but it is still in active development. A few important implementation notes are worth calling out:
+This project is already broad and feature-rich on the frontend side. The ERD, API, query, and codegen workflows are all present and connected through shared state. Export generation is also already substantial.
 
-- The schema, API, query, and codegen workspaces are present and wired in the frontend.
-- Local persistence is used heavily through `localStorage` for tabs, schemas, and API projects.
-- The database connection UI exposes PostgreSQL, MySQL, SQLite, and SQL Server options.
-- The Rust import implementation currently contains PostgreSQL and SQLite paths.
-- The current Tauri bootstrap in `src-tauri/src/lib.rs` only registers a sample `greet` command, so database import commands still need to be connected before the DB import workflow can fully function in-app.
-
-In short: the product vision is clearly implemented in the UI, and several exports/generators already work, but the native database integration is not fully finished yet.
-
-## Export Formats
-
-### Schema Workspace
-
-- `.dbm.json`
-- SQL
-- PNG
-- JPG
-
-### API Workspace
-
-- OpenAPI 3.0 JSON
-- TypeScript fetch client
-- JavaScript fetch client
-- Python FastAPI stubs
-- GraphQL SDL
-- GraphQL resolver stubs
-- Federation SDL
-- Apollo subgraph starter code
-
-### Query Workspace
-
-- SQL file export
-- PNG
-- JPG
-
-### Codegen Workspace
-
-- generated model code by language
-- clipboard copy
-- downloadable single-file output
-
-## Roadmap Ideas
-
-Some natural next steps for the project are:
-
-- register and finish Tauri DB commands end-to-end
-- complete MySQL and SQL Server native import support
-- add automated tests for stores and export generators
-- add project-level import/export across all workspaces
-- support richer SQL generation and validation
-- add migrations and diff tooling
-- package generated code into multi-file language templates
+The main unfinished area is breadth of native database integration. The Tauri command wiring is in place and PostgreSQL/SQLite import logic exists, but the UI currently exposes more dialect options than the backend fully supports. Because of that, some database workflows are only partially complete end-to-end in the desktop app.
 
 ## Contributing
 
-If you are extending the app, the best starting points are:
+If you are extending the project, these are good places to start:
 
 - `src/stores/schema.ts` for ERD behavior
 - `src/stores/api.ts` for API modeling and exports
-- `src/stores/query.ts` for SQL builder behavior
-- `src/components/codegen/CodegenPanel.vue` for model generation
+- `src/stores/query.ts` for query builder logic
+- `src/components/codegen/CodegenPanel.vue` for code generation behavior
 - `src-tauri/src/db.rs` for native database integration
 
-When contributing, try to keep the app honest: if a workflow is visible in the UI but incomplete natively, document that clearly instead of hiding it.
+A good contribution rule for this repository is: keep the README and the UI honest. If a workflow is visible but not fully wired through yet, document that clearly.
 
 ## License
 
-No license file is currently present in this repository. If you plan to share or distribute the project, add an explicit license so usage terms are clear.
+No license file is currently present in this repository. If you want to distribute or open-source the project, add an explicit license so usage terms are clear.
+
