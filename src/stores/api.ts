@@ -9,6 +9,7 @@ import type {
   ApiGroup, Position,
 } from '../types/api'
 import { NODE_DEFAULT_WIDTH, METHOD_COLORS, GQL_KIND_COLORS } from '../types/api'
+import { saveExportFile } from '../composables/useFileExport'
 
 const ENDPOINT_COLORS = ['#3ECF8E','#2FBF8F','#58C98D','#8ACB88','#56B8A6','#D5A35B','#E0705E','#A6D97A']
 const SERVICE_COLORS  = ['#3ECF8E','#57C5A0','#56B8A6','#8ACB88','#D5A35B','#E0705E','#A6D97A','#2FBF8F']
@@ -590,13 +591,14 @@ export const useApiStore = defineStore('api', () => {
     return lines.join('\n').trim()
   }
 
-  function saveToFile() {
+  async function saveToFile() {
     const json = JSON.stringify(project.value, null, 2)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href = url; a.download = `${project.value.name}.api.json`; a.click()
-    URL.revokeObjectURL(url)
+    await saveExportFile({
+      data: json,
+      defaultPath: `${project.value.name}.api.json`,
+      filters: [{ name: 'API Project JSON', extensions: ['json'] }],
+      mimeType: 'application/json',
+    })
   }
 
   function loadFromFile(json: ApiProject) {
@@ -650,3 +652,4 @@ export const useApiStore = defineStore('api', () => {
     createFromTable,
   }
 })
+

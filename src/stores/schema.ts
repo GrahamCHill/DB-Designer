@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import type { Schema, Table, Column, Relation, TableGroup, SQLDialect } from '../types'
 import { TABLE_WIDTH } from '../types'
 import { useTabsStore } from './tabs'
+import { saveExportFile } from '../composables/useFileExport'
 import {
   resolveTableGroup,
   applyGroupDrop,
@@ -298,13 +299,14 @@ export const useSchemaStore = defineStore('schema', () => {
     return lines.join('\n')
   }
 
-  function saveToFile() {
+  async function saveToFile() {
     const json = JSON.stringify(schema.value, null, 2)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href = url; a.download = `${schema.value.name}.dbm.json`; a.click()
-    URL.revokeObjectURL(url)
+    await saveExportFile({
+      data: json,
+      defaultPath: `${schema.value.name}.dbm.json`,
+      filters: [{ name: 'DB Model JSON', extensions: ['json'] }],
+      mimeType: 'application/json',
+    })
   }
 
   function loadFromJSON(json: Schema) {
@@ -334,4 +336,5 @@ export const useSchemaStore = defineStore('schema', () => {
     exportSQL, saveToFile, loadFromJSON, newSchema,
   }
 })
+
 

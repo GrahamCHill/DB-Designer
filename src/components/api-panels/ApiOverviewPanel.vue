@@ -85,6 +85,7 @@ import { useSchemaStore } from '../../stores/schema'
 import { useApiExports } from '../../composables/useApiExports'
 import { METHOD_COLORS, GQL_KIND_COLORS } from '../../types/api'
 import type { ApiExportTarget, RestEndpointNode, RestNode } from '../../types/api'
+import { saveExportFile } from '../../composables/useFileExport'
 
 const REST_HELP_LINK = 'https://developer.mozilla.org/en-US/docs/Glossary/REST'
 const GRAPHQL_HELP_LINK = 'https://graphql.org/learn/'
@@ -401,14 +402,16 @@ async function copyOutput() {
   }, 1800)
 }
 
-function downloadOutput() {
-  const blob = new Blob([previewText.value], { type: 'text/plain' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = exportDownloadName(selectedTarget.value)
-  a.click()
-  URL.revokeObjectURL(url)
+async function downloadOutput() {
+  const fileName = exportDownloadName(selectedTarget.value)
+  const extension = fileName.split('.').pop() ?? 'txt'
+
+  await saveExportFile({
+    data: previewText.value,
+    defaultPath: fileName,
+    filters: [{ name: extension.toUpperCase(), extensions: [extension] }],
+    mimeType: 'text/plain',
+  })
 }
 </script>
 
@@ -800,3 +803,4 @@ h3 {
   }
 }
 </style>
+

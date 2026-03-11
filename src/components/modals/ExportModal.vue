@@ -40,6 +40,7 @@
 import { ref, computed } from 'vue'
 import { useSchemaStore } from '../../stores/schema'
 import type { SQLDialect } from '../../types'
+import { saveExportFile } from '../../composables/useFileExport'
 
 const store = useSchemaStore()
 
@@ -65,14 +66,13 @@ async function copy() {
   setTimeout(() => (copied.value = false), 2000)
 }
 
-function download() {
-  const blob = new Blob([sql.value], { type: 'text/plain' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `${store.schema.name}.sql`
-  a.click()
-  URL.revokeObjectURL(url)
+async function download() {
+  await saveExportFile({
+    data: sql.value,
+    defaultPath: `${store.schema.name}.sql`,
+    filters: [{ name: 'SQL', extensions: ['sql'] }],
+    mimeType: 'text/plain',
+  })
 }
 </script>
 
@@ -225,3 +225,4 @@ function download() {
 
 .btn-download:hover { background: #45e09a; }
 </style>
+

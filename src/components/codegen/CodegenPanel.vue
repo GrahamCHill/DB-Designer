@@ -118,6 +118,7 @@
 
 <script setup lang="ts">
 import { ref, computed, reactive, watch } from 'vue'
+import { saveExportFile } from '../../composables/useFileExport'
 import { useSchemaStore }    from '../../stores/schema'
 
 const dbStore = useSchemaStore()
@@ -604,7 +605,7 @@ async function copyAll() {
   setTimeout(() => { copied.value = false }, 1800)
 }
 
-function downloadAll() {
+async function downloadAll() {
   let ext = 'txt'
   switch (activeLang.value) {
     case 'typescript': ext = 'ts'; break
@@ -616,11 +617,13 @@ function downloadAll() {
     case 'csharp':     ext = 'cs'; break
     case 'cpp':        ext = 'cpp'; break
   }
-  const blob = new Blob([getAllCode()], { type: 'text/plain' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = `models.${ext}`
-  a.click()
+
+  await saveExportFile({
+    data: getAllCode(),
+    defaultPath: `models.${ext}`,
+    filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+    mimeType: 'text/plain',
+  })
 }
 
 defineExpose({ copyAll, downloadAll })
@@ -753,5 +756,6 @@ defineExpose({ copyAll, downloadAll })
 .lang-go         { color: #7abfff; }
 .lang-python     { color: #a0c0a0; }
 </style>
+
 
 

@@ -33,6 +33,7 @@
 import { computed, ref, watch } from 'vue'
 import { useApiExports } from '../../composables/useApiExports'
 import type { ApiExportTarget } from '../../types/api'
+import { saveExportFile } from '../../composables/useFileExport'
 
 const { exportTargets, exportOutput, exportDownloadName, exportTargetForMode } = useApiExports()
 
@@ -55,14 +56,16 @@ async function copy() {
   }, 1800)
 }
 
-function download() {
-  const blob = new Blob([activeOutput.value], { type: 'text/plain' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = exportDownloadName(activeTab.value)
-  a.click()
-  URL.revokeObjectURL(url)
+async function download() {
+  const fileName = exportDownloadName(activeTab.value)
+  const extension = fileName.split('.').pop() ?? 'txt'
+
+  await saveExportFile({
+    data: activeOutput.value,
+    defaultPath: fileName,
+    filters: [{ name: extension.toUpperCase(), extensions: [extension] }],
+    mimeType: 'text/plain',
+  })
 }
 </script>
 
@@ -115,3 +118,4 @@ function download() {
 }
 .btn-download:hover { background: #45e09a; }
 </style>
+

@@ -180,14 +180,13 @@ function resetQuerySql() {
   queryStore.resetManualSql()
 }
 
-function exportQuerySQL() {
-  const blob = new Blob([queryStore.sql], { type: 'text/sql' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = 'query.sql'
-  a.click()
-  URL.revokeObjectURL(url)
+async function exportQuerySQL() {
+  await saveExportFile({
+    data: queryStore.sql,
+    defaultPath: 'query.sql',
+    filters: [{ name: 'SQL', extensions: ['sql'] }],
+    mimeType: 'text/sql',
+  })
 }
 
 async function copyCodegenAll() {
@@ -199,8 +198,8 @@ async function copyCodegenAll() {
   }, 2000)
 }
 
-function downloadCodegenAll() {
-  codegenPanel.value?.downloadAll()
+async function downloadCodegenAll() {
+  await codegenPanel.value?.downloadAll()
 }
 
 watch(() => workspaceStore.active, () => {}, { immediate: true })
@@ -225,7 +224,7 @@ import CodegenPanel from './components/codegen/CodegenPanel.vue'
 
 type CodegenPanelExposed = {
   copyAll: () => Promise<void>
-  downloadAll: () => void
+  downloadAll: () => Promise<void>
 }
 
 type ExportTheme = 'dark' | 'light'
@@ -238,6 +237,7 @@ const codegenPanel = ref<CodegenPanelExposed | null>(null)
 
 // ── PNG / JPG export ──────────────────────────────────────────────────────────
 import { useQueryStore } from './stores/query'
+import { saveExportFile } from './composables/useFileExport'
 const queryStore = useQueryStore()
 
 async function exportPng(format: 'png' | 'jpg') {
@@ -412,12 +412,26 @@ async function exportPng(format: 'png' | 'jpg') {
 
   const fileName = isQuery ? 'query' : (isApi ? 'api' : (store.schema.name || 'schema'))
   const themeSuffix = exportTheme === 'light' ? '-light' : ''
-  const link = document.createElement('a')
-  link.download = `${fileName}${themeSuffix}.${format}`
-  link.href = format === 'jpg'
-    ? canvas.toDataURL('image/jpeg', 0.95)
-    : canvas.toDataURL('image/png')
-  link.click()
+  const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png'
+  const blob = await new Promise<Blob | null>((resolve) => {
+    if (format === 'jpg') {
+      canvas.toBlob(resolve, mimeType, 0.95)
+      return
+    }
+    canvas.toBlob(resolve, mimeType)
+  })
+
+  if (!blob) {
+    alert('Could not export image')
+    return
+  }
+
+  await saveExportFile({
+    data: blob,
+    defaultPath: `${fileName}${themeSuffix}.${format}`,
+    filters: [{ name: format.toUpperCase(), extensions: [format] }],
+    mimeType,
+  })
 }
 
 function loadScript(src: string): Promise<void> {
@@ -607,6 +621,9 @@ body { font-family: 'JetBrains Mono', 'Fira Code', monospace; background: #0f0f1
 }
 
 </style>
+
+
+
 
 
 
