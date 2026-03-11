@@ -200,7 +200,7 @@
         <button @click="adjustZoom(0.1)">+</button>
         <span>{{ Math.round(zoom * 100) }}%</span>
         <button @click="adjustZoom(-0.1)">-</button>
-        <button title="Reset view" @click="resetView">Reset</button>
+        <button class="reset-view-btn" title="Reset view" @click="resetView">Reset</button>
       </div>
     </div>
 
@@ -924,6 +924,13 @@ const drawingPath = computed(() => {
   color: #e0e0e0;
 }
 
+
+.zoom-controls .reset-view-btn {
+  width: auto;
+  padding: 0 6px;
+  font-size: 11px;
+}
+
 .zoom-controls span {
   min-width: 36px;
   color: #555;
@@ -1005,6 +1012,8 @@ const drawingPath = computed(() => {
   word-break: break-all;
 }
 </style>
+
+
 
 
 

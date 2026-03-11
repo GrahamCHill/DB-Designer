@@ -107,7 +107,7 @@
       <button @click="adjustZoom(0.1)">+</button>
       <span>{{ Math.round(zoom * 100) }}%</span>
       <button @click="adjustZoom(-0.1)">-</button>
-      <button @click="resetView" title="Reset view">Reset</button>
+      <button @click="resetView" class="reset-view-btn" title="Reset view">Reset</button>
     </div>
 
     <!-- Minimap -->
@@ -659,9 +659,11 @@ function selectRelation(id: string) {
   border-radius: 5px; transition: color 0.15s, background 0.15s;
 }
 .zoom-controls button:hover { color: #e0e0e0; background: #28283380; }
+.zoom-controls .reset-view-btn { font-size: 11px; width: auto; padding: 0 6px; }
 .zoom-controls span {
   font-size: 11px; color: #555; min-width: 40px;
   text-align: center; font-variant-numeric: tabular-nums;
 }
 </style>
+
 

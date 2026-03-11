@@ -360,6 +360,37 @@ async function exportPng(format: 'png' | 'jpg') {
       if (exportTheme === 'light' && !isQuery && !isApi) {
         const exportRoot = clonedDoc.querySelector(`${canvasId} .canvas-content`) as HTMLElement | null
         exportRoot?.classList.add('export-light')
+
+        const relationPaths = clonedDoc.querySelectorAll(`${canvasId} .relations-svg path:not(.relation-hit)`)
+        relationPaths.forEach((path) => {
+          const relPath = path as SVGPathElement
+          relPath.setAttribute('stroke', '#020617')
+          relPath.setAttribute('stroke-width', '2.6')
+          relPath.style.stroke = '#020617'
+          relPath.style.strokeWidth = '2.6px'
+          relPath.style.opacity = '1'
+          relPath.style.filter = 'drop-shadow(0 0 1px rgba(248, 250, 252, 0.55))'
+        })
+
+        const markerPolygons = clonedDoc.querySelectorAll(`${canvasId} .relations-svg marker polygon`)
+        markerPolygons.forEach((polygon) => {
+          const arrow = polygon as SVGPolygonElement
+          arrow.setAttribute('fill', '#020617')
+          arrow.style.fill = '#020617'
+          arrow.style.opacity = '1'
+        })
+
+        const relationLabels = clonedDoc.querySelectorAll(`${canvasId} .relations-svg .rel-label`)
+        relationLabels.forEach((label) => {
+          const relLabel = label as SVGTextElement
+          relLabel.setAttribute('fill', '#020617')
+          relLabel.style.fill = '#020617'
+          relLabel.style.fontWeight = '700'
+          relLabel.style.paintOrder = 'stroke'
+          relLabel.style.stroke = 'rgba(248, 250, 252, 0.96)'
+          relLabel.style.strokeWidth = '3.5px'
+          relLabel.style.strokeLinejoin = 'round'
+        })
       }
 
       if (isQuery) {
@@ -554,6 +585,29 @@ body { font-family: 'JetBrains Mono', 'Fira Code', monospace; background: #0f0f1
   background: rgba(var(--group-color-rgb, 62, 207, 142), 0.22) !important;
   border-bottom-color: rgba(var(--group-color-rgb, 62, 207, 142), 0.42) !important;
 }
+
+.export-light .relations-svg path:not(.relation-hit) {
+  stroke: #0f172a !important;
+  stroke-width: 2.1 !important;
+  opacity: 1 !important;
+}
+
+.export-light .relations-svg marker polygon {
+  fill: #0f172a !important;
+  opacity: 1 !important;
+}
+
+.export-light .relations-svg .rel-label {
+  fill: #0f172a !important;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(248, 250, 252, 0.92);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
 </style>
+
+
 
 

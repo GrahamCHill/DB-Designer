@@ -168,7 +168,7 @@
       <button @click="adjustZoom(0.1)">+</button>
       <span>{{ Math.round(zoom * 100) }}%</span>
       <button @click="adjustZoom(-0.1)">-</button>
-      <button @click="resetView" title="Reset view">Reset</button>
+      <button @click="resetView" class="reset-view-btn" title="Reset view">Reset</button>
     </div>
 
     <!-- Delete/relation bar -->
@@ -747,6 +747,7 @@ onMounted(() => {
   transition: color 0.15s, background 0.15s;
 }
 .zoom-controls button:hover { color: #e0e0e0; background: #1e1e28; }
+.zoom-controls .reset-view-btn { font-size: 11px; width: auto; padding: 0 6px; }
 .zoom-controls span { font-size: 11px; color: #555; min-width: 36px; text-align: center;
   font-family: 'JetBrains Mono', monospace; }
 
@@ -765,4 +766,5 @@ onMounted(() => {
 }
 .rel-bar-del:hover { background: #EF444415; }
 </style>
+
 
