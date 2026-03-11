@@ -37,6 +37,7 @@ export const useSchemaStore = defineStore('schema', () => {
   const editingTableId     = ref<string | null>(null)
   const editingGroupId     = ref<string | null>(null)
   const showMinimap        = ref(true)
+  const lightExportMode    = ref(false)
 
   const selectedTable = computed(() => schema.value.tables.find(t => t.id === selectedTableId.value) ?? null)
   const selectedGroup = computed(() => schema.value.groups.find(g => g.id === selectedGroupId.value) ?? null)
@@ -321,7 +322,7 @@ export const useSchemaStore = defineStore('schema', () => {
   return {
     schema,
     selectedTableId, selectedRelationId, selectedGroupId, editingTableId, editingGroupId,
-    selectedTable, selectedGroup, clearSelection, showMinimap,
+    selectedTable, selectedGroup, clearSelection, showMinimap, lightExportMode,
     createTable, updateTable, deleteTable,
     addColumn, updateColumn, deleteColumn,
     updateTablePosition, updateTableWidth, commitTableWidth,
@@ -333,3 +334,4 @@ export const useSchemaStore = defineStore('schema', () => {
     exportSQL, saveToFile, loadFromJSON, newSchema,
   }
 })
+

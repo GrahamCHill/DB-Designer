@@ -33,6 +33,7 @@
           title="Export diagram as JPG"
           @click="exportPng('jpg')"
         >⤓ JPG</button>
+
         <button
           v-if="workspaceStore.active === 'query'"
           class="ws-action-btn"
@@ -144,14 +145,14 @@
 import { ref, computed, watch } from 'vue'
 
 import { useWorkspaceStore } from './stores/workspace'
-import type { Workspace }    from './stores/workspace'
+import type { Workspace } from './stores/workspace'
 const workspaceStore = useWorkspaceStore()
 
 const workspaces: { id: Workspace; label: string; icon: string }[] = [
-  { id: 'db',      label: 'DB Schema',    icon: '⬡' },
-  { id: 'api',     label: 'API Designer', icon: '⇄' },
-  { id: 'query',   label: 'Query Builder',icon: '⊞' },
-  { id: 'codegen', label: 'ERD to Code',  icon: '⟨⟩' },
+  { id: 'db', label: 'DB Schema', icon: '⬡' },
+  { id: 'api', label: 'API Designer', icon: '⇄' },
+  { id: 'query', label: 'Query Builder', icon: '⊞' },
+  { id: 'codegen', label: 'ERD to Code', icon: '⟨⟩' },
 ]
 
 import { useApiStore } from './stores/api'
@@ -204,32 +205,34 @@ function downloadCodegenAll() {
 
 watch(() => workspaceStore.active, () => {}, { immediate: true })
 
-import { useSchemaStore }    from './stores/schema'
+import { useSchemaStore } from './stores/schema'
 import {
   TABLE_HEADER_H,
   TABLE_COL_PAD_TOP,
-  TABLE_ROW_H
+  TABLE_ROW_H,
 } from './types'
-import Sidebar               from './components/sidebar/Sidebar.vue'
-import TabBar                from './components/canvas/TabBar.vue'
-import DiagramCanvas         from './components/canvas/DiagramCanvas.vue'
-import TableEditorModal      from './components/modals/TableEditorModal.vue'
-import DBConnectModal        from './components/modals/DBConnectModal.vue'
-import ApiSidebar            from './components/api-sidebar/ApiSidebar.vue'
-import ApiCanvas             from './components/canvas/api-canvas/ApiCanvas.vue'
-import ApiOverviewPanel      from './components/api-panels/ApiOverviewPanel.vue'
-import QuerySidebar          from './components/query-sidebar/QuerySidebar.vue'
-import QueryCanvas           from './components/query-canvas/QueryCanvas.vue'
-import CodegenPanel          from './components/codegen/CodegenPanel.vue'
+import Sidebar from './components/sidebar/Sidebar.vue'
+import TabBar from './components/canvas/TabBar.vue'
+import DiagramCanvas from './components/canvas/DiagramCanvas.vue'
+import TableEditorModal from './components/modals/TableEditorModal.vue'
+import DBConnectModal from './components/modals/DBConnectModal.vue'
+import ApiSidebar from './components/api-sidebar/ApiSidebar.vue'
+import ApiCanvas from './components/canvas/api-canvas/ApiCanvas.vue'
+import ApiOverviewPanel from './components/api-panels/ApiOverviewPanel.vue'
+import QuerySidebar from './components/query-sidebar/QuerySidebar.vue'
+import QueryCanvas from './components/query-canvas/QueryCanvas.vue'
+import CodegenPanel from './components/codegen/CodegenPanel.vue'
 
 type CodegenPanelExposed = {
   copyAll: () => Promise<void>
   downloadAll: () => void
 }
 
+type ExportTheme = 'dark' | 'light'
+
 const store = useSchemaStore()
 const showDBConnect = ref(false)
-const editingTable  = computed(() => store.schema.tables.find(t => t.id === store.editingTableId) ?? null)
+const editingTable = computed(() => store.schema.tables.find(t => t.id === store.editingTableId) ?? null)
 const codegenPanel = ref<CodegenPanelExposed | null>(null)
 ;(window as any).__dbDesignerShowConnect = () => { showDBConnect.value = true }
 
@@ -238,19 +241,18 @@ import { useQueryStore } from './stores/query'
 const queryStore = useQueryStore()
 
 async function exportPng(format: 'png' | 'jpg') {
-  // Load html2canvas via script tag
   await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js')
   const h2c = (window as any).html2canvas
   if (!h2c) { alert('Could not load html2canvas'); return }
 
   const isQuery = workspaceStore.active === 'query'
-  const isApi   = workspaceStore.active === 'api'
-  
-  // Choose the element to capture. Query mode uses the full stage because it has multiple content layers.
+  const isApi = workspaceStore.active === 'api'
+  const exportTheme: ExportTheme = !isQuery && !isApi && store.lightExportMode ? 'light' : 'dark'
+
   let canvasId = '#db-canvas-area'
   if (isQuery) canvasId = '#query-canvas-area'
-  if (isApi)   canvasId = '.api-canvas-container'
-  
+  if (isApi) canvasId = '.api-canvas-container'
+
   const captureSelector = isQuery
     ? `${canvasId} .qcanvas-stage`
     : `${canvasId} .canvas-content, ${canvasId} .qcanvas-content`
@@ -260,18 +262,16 @@ async function exportPng(format: 'png' | 'jpg') {
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
 
-  // 1. Calculate bounding box of ALL content
   if (isQuery) {
     if (queryStore.tables.length === 0) { alert('Canvas is empty'); return }
     queryStore.tables.forEach(t => {
       const w = t.width || 220
-      const h = 44 + (t.columns.length * 32) + 32 // Approximate for QueryTableNode
+      const h = 44 + (t.columns.length * 32) + 32
       minX = Math.min(minX, t.position.x)
       minY = Math.min(minY, t.position.y)
       maxX = Math.max(maxX, t.position.x + w)
       maxY = Math.max(maxY, t.position.y + h)
     })
-    // Also consider QuerySummaryNode if it exists on canvas
     const summary = document.querySelector('.query-summary-node') as HTMLElement
     if (summary) {
       const x = parseInt(summary.style.left) || 0
@@ -285,19 +285,21 @@ async function exportPng(format: 'png' | 'jpg') {
     }
   } else if (isApi) {
     const apiStore = (window as any).apiStore || (await import('./stores/api')).useApiStore()
-    const nodes = apiStore.mode === 'rest' ? apiStore.restNodes : 
-                 apiStore.mode === 'graphql' ? apiStore.gqlNodes : apiStore.fedNodes
-    
+    const nodes = apiStore.mode === 'rest'
+      ? apiStore.restNodes
+      : apiStore.mode === 'graphql'
+        ? apiStore.gqlNodes
+        : apiStore.fedNodes
+
     if (nodes.length === 0) { alert('Canvas is empty'); return }
     nodes.forEach((n: any) => {
       const w = n.width || 250
-      const h = 200 // Node heights vary, but 200 is a safe min
+      const h = 200
       minX = Math.min(minX, n.position.x)
       minY = Math.min(minY, n.position.y)
       maxX = Math.max(maxX, n.position.x + w)
       maxY = Math.max(maxY, n.position.y + h)
     })
-    // If background ERD is visible, we should probably include it too
     store.schema.tables.forEach(t => {
       const w = t.width || 320
       const h = TABLE_HEADER_H + TABLE_COL_PAD_TOP + (t.columns.length * TABLE_ROW_H) + 20
@@ -307,7 +309,6 @@ async function exportPng(format: 'png' | 'jpg') {
       maxY = Math.max(maxY, t.position.y + h)
     })
   } else {
-    // DB Schema
     const s = store.schema
     if (s.tables.length === 0 && s.groups.length === 0) { alert('Canvas is empty'); return }
     s.tables.forEach(t => {
@@ -326,40 +327,47 @@ async function exportPng(format: 'png' | 'jpg') {
     })
   }
 
-  // 2. Add padding and ensure finite bounds
   const padding = 80
-  if (minX === Infinity) { minX = 0; minY = 0; maxX = 800; maxY = 600 }
-  else {
-    minX -= padding; minY -= padding; maxX += padding; maxY += padding
+  if (minX === Infinity) {
+    minX = 0
+    minY = 0
+    maxX = 800
+    maxY = 600
+  } else {
+    minX -= padding
+    minY -= padding
+    maxX += padding
+    maxY += padding
   }
 
   const width = maxX - minX
   const height = maxY - minY
 
-  // 3. Render high-res image
-  // To avoid issues with current zoom/pan, we temporarily reset transform or use scrollX/Y
-  // html2canvas works best if we tell it exactly which part of the element to capture.
   const canvas = await h2c(el, {
-    backgroundColor: '#0f0f12',
-    scale: 8, // High resolution (increased to 8 for 4x more pixels)
+    backgroundColor: exportTheme === 'light' ? '#f8fafc' : '#0f0f12',
+    scale: 8,
     useCORS: true,
     logging: false,
     x: minX,
     y: minY,
-    width: width,
-    height: height,
-    scrollX: -window.scrollX, // Ensure viewport doesn't interfere
+    width,
+    height,
+    scrollX: -window.scrollX,
     scrollY: -window.scrollY,
     windowWidth: el.scrollWidth,
     windowHeight: el.scrollHeight,
     onclone: (clonedDoc: Document) => {
-      // Reset transform on the cloned element so capture is 1:1 with coordinates
+      if (exportTheme === 'light' && !isQuery && !isApi) {
+        const exportRoot = clonedDoc.querySelector(`${canvasId} .canvas-content`) as HTMLElement | null
+        exportRoot?.classList.add('export-light')
+      }
+
       if (isQuery) {
         const clonedLayers = clonedDoc.querySelectorAll(`${canvasId} .qcanvas-content`)
         clonedLayers.forEach((layer) => {
-          const el = layer as HTMLElement
-          el.style.transform = 'none'
-          el.style.transformOrigin = '0 0'
+          const layerEl = layer as HTMLElement
+          layerEl.style.transform = 'none'
+          layerEl.style.transformOrigin = '0 0'
         })
       } else {
         const clonedEl = clonedDoc.querySelector(`${canvasId} .canvas-content, ${canvasId} .qcanvas-content`) as HTMLElement
@@ -368,12 +376,13 @@ async function exportPng(format: 'png' | 'jpg') {
           clonedEl.style.transformOrigin = '0 0'
         }
       }
-    }
+    },
   })
 
   const fileName = isQuery ? 'query' : (isApi ? 'api' : (store.schema.name || 'schema'))
+  const themeSuffix = exportTheme === 'light' ? '-light' : ''
   const link = document.createElement('a')
-  link.download = `${fileName}.${format}`
+  link.download = `${fileName}${themeSuffix}.${format}`
   link.href = format === 'jpg'
     ? canvas.toDataURL('image/jpeg', 0.95)
     : canvas.toDataURL('image/png')
@@ -384,7 +393,9 @@ function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
     if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
     const s = document.createElement('script')
-    s.src = src; s.onload = () => resolve(); s.onerror = reject
+    s.src = src
+    s.onload = () => resolve()
+    s.onerror = reject
     document.head.appendChild(s)
   })
 }
@@ -394,7 +405,7 @@ function loadScript(src: string): Promise<void> {
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #app { height: 100%; width: 100%; overflow: hidden; }
-body { font-family: 'JetBrains Mono','Fira Code',monospace; background: #0f0f12; color: #d0d0d8; -webkit-font-smoothing: antialiased; }
+body { font-family: 'JetBrains Mono', 'Fira Code', monospace; background: #0f0f12; color: #d0d0d8; -webkit-font-smoothing: antialiased; }
 
 .app { display: flex; flex-direction: column; height: 100vh; width: 100vw; overflow: hidden; }
 
@@ -404,9 +415,9 @@ body { font-family: 'JetBrains Mono','Fira Code',monospace; background: #0f0f12;
   flex-shrink: 0; background: #09090d; border-bottom: 1px solid #1a1a24; z-index: 200;
 }
 .ws-brand { display: flex; align-items: center; gap: 7px; padding: 0 16px; border-right: 1px solid #1a1a24; height: 100%; flex-shrink: 0; }
-.ws-icon  { font-size: 15px; color: #3ECF8E; }
-.ws-name  { font-size: 12px; font-weight: 700; color: #e0e0e0; letter-spacing: 0.05em; }
-.ws-tabs  { display: flex; height: 100%; flex: 1; }
+.ws-icon { font-size: 15px; color: #3ECF8E; }
+.ws-name { font-size: 12px; font-weight: 700; color: #e0e0e0; letter-spacing: 0.05em; }
+.ws-tabs { display: flex; height: 100%; flex: 1; }
 .ws-tab {
   display: flex; align-items: center; gap: 6px; padding: 0 18px;
   background: none; border: none; border-right: 1px solid #1a1a24;
@@ -415,9 +426,9 @@ body { font-family: 'JetBrains Mono','Fira Code',monospace; background: #0f0f12;
   letter-spacing: 0.04em; white-space: nowrap;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
-.ws-tab:hover  { color: #888; background: #111116; }
+.ws-tab:hover { color: #888; background: #111116; }
 .ws-tab.active { color: #3ECF8E; background: #0a1410; border-bottom-color: #3ECF8E; }
-.ws-tab-icon   { font-size: 13px; }
+.ws-tab-icon { font-size: 13px; }
 .ws-right { display: flex; align-items: center; gap: 6px; padding: 0 12px; margin-left: auto; }
 .ws-action-btn {
   background: none; border: 1px solid #2a2a3a; color: #555; border-radius: 5px;
@@ -456,14 +467,93 @@ body { font-family: 'JetBrains Mono','Fira Code',monospace; background: #0f0f12;
   background: transparent !important;
   z-index: 1;
 }
+
+.export-light {
+  background:
+    radial-gradient(circle, #d8dee8 1px, transparent 1px),
+    #f8fafc !important;
+  background-size: 24px 24px !important;
+}
+
+.export-light .table-node {
+  background: #eef2f7 !important;
+  border-color: #94a3b8 !important;
+  box-shadow:
+    0 0 0 1px rgba(71, 85, 105, 0.18),
+    0 14px 30px rgba(15, 23, 42, 0.14) !important;
+}
+
+.export-light .table-node.selected {
+  box-shadow:
+    0 0 0 2px rgba(var(--table-color-rgb, 62, 207, 142), 0.45),
+    0 16px 36px rgba(15, 23, 42, 0.12) !important;
+}
+
+.export-light .table-node.highlighted {
+  box-shadow:
+    0 0 0 2px rgba(var(--table-color-rgb, 62, 207, 142), 0.5),
+    0 0 22px rgba(var(--table-color-rgb, 62, 207, 142), 0.18),
+    0 16px 36px rgba(15, 23, 42, 0.12) !important;
+}
+
+.export-light .table-header {
+  border-bottom-color: #94a3b8 !important;
+  background: rgba(var(--table-color-rgb, 62, 207, 142), 0.14) !important;
+}
+
+.export-light .table-name,
+.export-light .col-name {
+  color: #0f172a !important;
+}
+
+.export-light .col-type,
+.export-light .conn-count {
+  color: rgba(var(--table-color-rgb, 62, 207, 142), 0.85) !important;
+}
+
+.export-light .col-count,
+.export-light .no-columns,
+.export-light .resize-handle {
+  color: #475569 !important;
+}
+
+.export-light .columns-list,
+.export-light .table-footer {
+  background: #e2e8f0 !important;
+}
+
+.export-light .column-row:hover {
+  background: #dbe4ef !important;
+}
+
+.export-light .column-row.is-pk {
+  background: rgba(62, 207, 142, 0.16) !important;
+}
+
+.export-light .column-row.is-pk:hover {
+  background: rgba(62, 207, 142, 0.22) !important;
+}
+
+.export-light .connector {
+  border-color: #64748b !important;
+  background: #eef2f7 !important;
+}
+
+.export-light .connector.connected {
+  border-color: var(--dot-color, #3ECF8E) !important;
+  background: var(--dot-color, #3ECF8E) !important;
+}
+
+.export-light .group-node {
+  background: rgba(var(--group-color-rgb, 62, 207, 142), 0.12) !important;
+  border-color: rgba(var(--group-color-rgb, 62, 207, 142), 0.65) !important;
+  box-shadow: inset 0 0 0 1px rgba(var(--group-color-rgb, 62, 207, 142), 0.12) !important;
+}
+
+.export-light .group-header {
+  background: rgba(var(--group-color-rgb, 62, 207, 142), 0.22) !important;
+  border-bottom-color: rgba(var(--group-color-rgb, 62, 207, 142), 0.42) !important;
+}
 </style>
-
-
-
-
-
-
-
-
 
 

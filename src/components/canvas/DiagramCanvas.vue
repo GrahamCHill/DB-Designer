@@ -106,8 +106,8 @@
     <div class="zoom-controls">
       <button @click="adjustZoom(0.1)">+</button>
       <span>{{ Math.round(zoom * 100) }}%</span>
-      <button @click="adjustZoom(-0.1)">âˆ’</button>
-      <button @click="resetView" title="Reset view">âŠ™</button>
+      <button @click="adjustZoom(-0.1)">-</button>
+      <button @click="resetView" title="Reset view">Reset</button>
     </div>
 
     <!-- Minimap -->
@@ -664,3 +664,4 @@ function selectRelation(id: string) {
   text-align: center; font-variant-numeric: tabular-nums;
 }
 </style>
+

@@ -200,7 +200,7 @@
         <button @click="adjustZoom(0.1)">+</button>
         <span>{{ Math.round(zoom * 100) }}%</span>
         <button @click="adjustZoom(-0.1)">-</button>
-        <button title="Reset" @click="resetView">o</button>
+        <button title="Reset view" @click="resetView">Reset</button>
       </div>
     </div>
 
@@ -1005,6 +1005,7 @@ const drawingPath = computed(() => {
   word-break: break-all;
 }
 </style>
+
 
 
 

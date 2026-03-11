@@ -39,6 +39,10 @@
           <input type="checkbox" v-model="store.showMinimap" />
           <span>Show Minimap</span>
         </label>
+        <label class="view-option">
+          <input type="checkbox" v-model="store.lightExportMode" />
+          <span>Light Export Images</span>
+        </label>
       </div>
     </div>
 
@@ -638,3 +642,4 @@ function loadFile(e: Event) {
   color: #fff;
 }
 </style>
+
