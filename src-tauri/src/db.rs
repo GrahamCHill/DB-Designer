@@ -89,8 +89,15 @@ impl ConnectArgs {
         let db = self.database.as_deref().unwrap_or("postgres");
         let user = self.username.as_deref().unwrap_or("postgres");
         let pass = self.password.as_deref().unwrap_or("");
-        let ssl = if self.ssl.unwrap_or(false) { "?sslmode=require" } else { "" };
-        format!("postgresql://{}:{}@{}:{}/{}{}", user, pass, host, port, db, ssl)
+        let ssl = if self.ssl.unwrap_or(false) {
+            "?sslmode=require"
+        } else {
+            ""
+        };
+        format!(
+            "postgresql://{}:{}@{}:{}/{}{}",
+            user, pass, host, port, db, ssl
+        )
     }
 
     fn mysql_url(&self) -> String {
@@ -137,37 +144,91 @@ fn map_pg_type(pg: &str) -> String {
 
 fn map_mysql_type(t: &str) -> String {
     let lower = t.to_lowercase();
-    if lower.contains("bigint") { return "BIGINT".into(); }
-    if lower.contains("smallint") { return "SMALLINT".into(); }
-    if lower.contains("tinyint") || lower.contains("bit") { return "BOOLEAN".into(); }
-    if lower.contains("int") { return "INTEGER".into(); }
-    if lower.contains("decimal") || lower.contains("numeric") { return "DECIMAL".into(); }
-    if lower.contains("double") { return "DOUBLE".into(); }
-    if lower.contains("float") { return "FLOAT".into(); }
-    if lower.contains("datetime") || lower.contains("timestamp") { return "TIMESTAMP".into(); }
-    if lower.contains("date") { return "DATE".into(); }
-    if lower.contains("time") { return "TIME".into(); }
-    if lower.contains("text") { return "TEXT".into(); }
-    if lower.contains("char") || lower.contains("varchar") { return "VARCHAR".into(); }
-    if lower.contains("blob") || lower.contains("binary") { return "BYTEA".into(); }
-    if lower.contains("json") { return "JSON".into(); }
+    if lower.contains("bigint") {
+        return "BIGINT".into();
+    }
+    if lower.contains("smallint") {
+        return "SMALLINT".into();
+    }
+    if lower.contains("tinyint") || lower.contains("bit") {
+        return "BOOLEAN".into();
+    }
+    if lower.contains("int") {
+        return "INTEGER".into();
+    }
+    if lower.contains("decimal") || lower.contains("numeric") {
+        return "DECIMAL".into();
+    }
+    if lower.contains("double") {
+        return "DOUBLE".into();
+    }
+    if lower.contains("float") {
+        return "FLOAT".into();
+    }
+    if lower.contains("datetime") || lower.contains("timestamp") {
+        return "TIMESTAMP".into();
+    }
+    if lower.contains("date") {
+        return "DATE".into();
+    }
+    if lower.contains("time") {
+        return "TIME".into();
+    }
+    if lower.contains("text") {
+        return "TEXT".into();
+    }
+    if lower.contains("char") || lower.contains("varchar") {
+        return "VARCHAR".into();
+    }
+    if lower.contains("blob") || lower.contains("binary") {
+        return "BYTEA".into();
+    }
+    if lower.contains("json") {
+        return "JSON".into();
+    }
     "TEXT".into()
 }
 
 fn map_sqlite_type(t: &str) -> String {
     let lower = t.to_lowercase();
-    if lower.contains("bigint") { return "BIGINT".into(); }
-    if lower.contains("smallint") { return "SMALLINT".into(); }
-    if lower.contains("int") { return "INTEGER".into(); }
-    if lower.contains("decimal") || lower.contains("numeric") { return "DECIMAL".into(); }
-    if lower.contains("double") { return "DOUBLE".into(); }
-    if lower.contains("float") || lower.contains("real") { return "FLOAT".into(); }
-    if lower.contains("datetime") || lower.contains("timestamp") { return "TIMESTAMP".into(); }
-    if lower == "date" { return "DATE".into(); }
-    if lower == "time" { return "TIME".into(); }
-    if lower.contains("blob") || lower.contains("binary") { return "BYTEA".into(); }
-    if lower.contains("json") { return "JSON".into(); }
-    if lower.contains("char") || lower.contains("clob") || lower.contains("text") || lower.contains("varchar") {
+    if lower.contains("bigint") {
+        return "BIGINT".into();
+    }
+    if lower.contains("smallint") {
+        return "SMALLINT".into();
+    }
+    if lower.contains("int") {
+        return "INTEGER".into();
+    }
+    if lower.contains("decimal") || lower.contains("numeric") {
+        return "DECIMAL".into();
+    }
+    if lower.contains("double") {
+        return "DOUBLE".into();
+    }
+    if lower.contains("float") || lower.contains("real") {
+        return "FLOAT".into();
+    }
+    if lower.contains("datetime") || lower.contains("timestamp") {
+        return "TIMESTAMP".into();
+    }
+    if lower == "date" {
+        return "DATE".into();
+    }
+    if lower == "time" {
+        return "TIME".into();
+    }
+    if lower.contains("blob") || lower.contains("binary") {
+        return "BYTEA".into();
+    }
+    if lower.contains("json") {
+        return "JSON".into();
+    }
+    if lower.contains("char")
+        || lower.contains("clob")
+        || lower.contains("text")
+        || lower.contains("varchar")
+    {
         return "VARCHAR".into();
     }
     "TEXT".into()
@@ -197,25 +258,44 @@ fn map_sqlserver_type(t: &str) -> String {
 }
 fn table_colors() -> Vec<&'static str> {
     vec![
-        "#3ECF8E", "#3B82F6", "#8B5CF6", "#F59E0B",
-        "#EF4444", "#06B6D4", "#EC4899", "#10B981",
+        "#3ECF8E", "#3B82F6", "#8B5CF6", "#F59E0B", "#EF4444", "#06B6D4", "#EC4899", "#10B981",
     ]
+}
+
+fn low_impact_connect_timeout() -> std::time::Duration {
+    std::time::Duration::from_secs(10)
 }
 
 #[cfg(feature = "postgres")]
 mod pg_impl {
     use super::*;
-    use sqlx::{PgPool, Row};
+    use sqlx::{postgres::PgPoolOptions, Row};
+    use std::collections::HashMap;
+
+    async fn connect(args: &ConnectArgs) -> Result<sqlx::PgPool, String> {
+        PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(low_impact_connect_timeout())
+            .connect(&args.pg_url())
+            .await
+            .map_err(|e| e.to_string())
+    }
 
     pub async fn test(args: &ConnectArgs) -> Result<TestResult, String> {
-        match PgPool::connect(&args.pg_url()).await {
-            Ok(_) => Ok(TestResult { ok: true, message: "Connected successfully".into() }),
-            Err(e) => Ok(TestResult { ok: false, message: e.to_string() }),
+        match connect(args).await {
+            Ok(_) => Ok(TestResult {
+                ok: true,
+                message: "Connected successfully".into(),
+            }),
+            Err(e) => Ok(TestResult {
+                ok: false,
+                message: e.to_string(),
+            }),
         }
     }
 
     pub async fn import(args: &ConnectArgs, db_name: &str) -> Result<ImportedSchema, String> {
-        let pool = PgPool::connect(&args.pg_url()).await.map_err(|e| e.to_string())?;
+        let pool = connect(args).await?;
         let rows = sqlx::query(
             r#"
             SELECT table_name
@@ -228,67 +308,86 @@ mod pg_impl {
         .await
         .map_err(|e: sqlx::Error| e.to_string())?;
 
+        let column_rows = sqlx::query(
+            r#"
+            SELECT
+                c.table_name,
+                c.column_name,
+                c.data_type,
+                c.is_nullable,
+                c.column_default,
+                COALESCE(pk.is_pk, FALSE) AS is_pk,
+                COALESCE(uq.is_unique, FALSE) AS is_unique
+            FROM information_schema.columns c
+            LEFT JOIN (
+                SELECT kcu.table_name, kcu.column_name, TRUE AS is_pk
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                  ON tc.constraint_name = kcu.constraint_name
+                 AND tc.table_schema = kcu.table_schema
+                 AND tc.table_name = kcu.table_name
+                WHERE tc.table_schema = 'public'
+                  AND tc.constraint_type = 'PRIMARY KEY'
+            ) pk
+              ON pk.table_name = c.table_name
+             AND pk.column_name = c.column_name
+            LEFT JOIN (
+                SELECT kcu.table_name, kcu.column_name, TRUE AS is_unique
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                  ON tc.constraint_name = kcu.constraint_name
+                 AND tc.table_schema = kcu.table_schema
+                 AND tc.table_name = kcu.table_name
+                WHERE tc.table_schema = 'public'
+                  AND tc.constraint_type = 'UNIQUE'
+            ) uq
+              ON uq.table_name = c.table_name
+             AND uq.column_name = c.column_name
+            WHERE c.table_schema = 'public'
+            ORDER BY c.table_name, c.ordinal_position
+            "#,
+        )
+        .fetch_all(&pool)
+        .await
+        .map_err(|e: sqlx::Error| e.to_string())?;
+
         let colors = table_colors();
         let mut tables: Vec<SchemaTable> = Vec::new();
-        let mut table_id_map: std::collections::HashMap<String, String> = Default::default();
+        let mut table_id_map: HashMap<String, String> = Default::default();
+        let mut columns_by_table: HashMap<String, Vec<SchemaColumn>> = HashMap::new();
+
+        for column in column_rows {
+            let table_name: String = column.try_get("table_name").map_err(|e| e.to_string())?;
+            columns_by_table
+                .entry(table_name)
+                .or_default()
+                .push(SchemaColumn {
+                    id: Uuid::new_v4().to_string(),
+                    name: column.try_get("column_name").map_err(|e| e.to_string())?,
+                    col_type: map_pg_type(
+                        &column
+                            .try_get::<String, _>("data_type")
+                            .map_err(|e| e.to_string())?,
+                    ),
+                    nullable: column
+                        .try_get::<String, _>("is_nullable")
+                        .map_err(|e| e.to_string())?
+                        == "YES",
+                    primary_key: column.try_get::<bool, _>("is_pk").unwrap_or(false),
+                    unique: column.try_get::<bool, _>("is_unique").unwrap_or(false),
+                    default_value: column
+                        .try_get::<Option<String>, _>("column_default")
+                        .unwrap_or_default()
+                        .unwrap_or_default(),
+                    comment: String::new(),
+                });
+        }
 
         for (i, row) in rows.iter().enumerate() {
             let table_name: String = row.try_get("table_name").map_err(|e| e.to_string())?;
             let table_id = Uuid::new_v4().to_string();
             table_id_map.insert(table_name.clone(), table_id.clone());
-
-            let col_rows = sqlx::query(
-                r#"
-                SELECT
-                    c.column_name,
-                    c.data_type,
-                    c.is_nullable,
-                    c.column_default,
-                    COALESCE(
-                        (SELECT TRUE FROM information_schema.table_constraints tc
-                         JOIN information_schema.key_column_usage kcu
-                           ON tc.constraint_name = kcu.constraint_name
-                          AND tc.table_schema = kcu.table_schema
-                          AND tc.table_name = kcu.table_name
-                         WHERE tc.constraint_type = 'PRIMARY KEY'
-                           AND kcu.column_name = c.column_name
-                           AND tc.table_name = $1
-                         LIMIT 1),
-                        FALSE
-                    ) AS is_pk,
-                    COALESCE(
-                        (SELECT TRUE FROM information_schema.table_constraints tc
-                         JOIN information_schema.key_column_usage kcu
-                           ON tc.constraint_name = kcu.constraint_name
-                         WHERE tc.constraint_type = 'UNIQUE'
-                           AND kcu.column_name = c.column_name
-                           AND tc.table_name = $1
-                         LIMIT 1),
-                        FALSE
-                    ) AS is_unique
-                FROM information_schema.columns c
-                WHERE c.table_schema = 'public' AND c.table_name = $1
-                ORDER BY c.ordinal_position
-                "#,
-            )
-            .bind(&table_name)
-            .fetch_all(&pool)
-            .await
-            .map_err(|e: sqlx::Error| e.to_string())?;
-
-            let mut columns: Vec<SchemaColumn> = Vec::new();
-            for c in col_rows {
-                columns.push(SchemaColumn {
-                    id: Uuid::new_v4().to_string(),
-                    name: c.try_get("column_name").map_err(|e| e.to_string())?,
-                    col_type: map_pg_type(&c.try_get::<String, _>("data_type").map_err(|e| e.to_string())?),
-                    nullable: c.try_get::<String, _>("is_nullable").map_err(|e| e.to_string())? == "YES",
-                    primary_key: c.try_get::<bool, _>("is_pk").unwrap_or(false),
-                    unique: c.try_get::<bool, _>("is_unique").unwrap_or(false),
-                    default_value: c.try_get::<Option<String>, _>("column_default").unwrap_or_default().unwrap_or_default(),
-                    comment: String::new(),
-                });
-            }
+            let columns = columns_by_table.remove(&table_name).unwrap_or_default();
 
             let x = (i % 3) as f64 * 380.0 + 60.0;
             let y = (i / 3) as f64 * 320.0 + 60.0;
@@ -329,12 +428,30 @@ mod pg_impl {
             let t_table: String = fk.try_get("target_table").map_err(|e| e.to_string())?;
             let t_col: String = fk.try_get("target_col").map_err(|e| e.to_string())?;
 
-            let src_tid = match table_id_map.get(&s_table) { Some(v) => v.clone(), None => continue };
-            let tgt_tid = match table_id_map.get(&t_table) { Some(v) => v.clone(), None => continue };
-            let src_table = match tables.iter().find(|t| t.id == src_tid) { Some(v) => v, None => continue };
-            let tgt_table = match tables.iter().find(|t| t.id == tgt_tid) { Some(v) => v, None => continue };
-            let src_cid = match src_table.columns.iter().find(|c| c.name == s_col) { Some(v) => v.id.clone(), None => continue };
-            let tgt_cid = match tgt_table.columns.iter().find(|c| c.name == t_col) { Some(v) => v.id.clone(), None => continue };
+            let src_tid = match table_id_map.get(&s_table) {
+                Some(v) => v.clone(),
+                None => continue,
+            };
+            let tgt_tid = match table_id_map.get(&t_table) {
+                Some(v) => v.clone(),
+                None => continue,
+            };
+            let src_table = match tables.iter().find(|t| t.id == src_tid) {
+                Some(v) => v,
+                None => continue,
+            };
+            let tgt_table = match tables.iter().find(|t| t.id == tgt_tid) {
+                Some(v) => v,
+                None => continue,
+            };
+            let src_cid = match src_table.columns.iter().find(|c| c.name == s_col) {
+                Some(v) => v.id.clone(),
+                None => continue,
+            };
+            let tgt_cid = match tgt_table.columns.iter().find(|c| c.name == t_col) {
+                Some(v) => v.id.clone(),
+                None => continue,
+            };
             relations.push(SchemaRelation {
                 id: Uuid::new_v4().to_string(),
                 source_table_id: src_tid,
@@ -361,19 +478,35 @@ mod pg_impl {
 #[cfg(feature = "sqlite")]
 mod sqlite_impl {
     use super::*;
-    use sqlx::{Row, SqlitePool};
+    use sqlx::{sqlite::SqlitePoolOptions, Row};
 
     pub async fn test(path: &str) -> Result<TestResult, String> {
         let url = format!("sqlite://{}", path);
-        match SqlitePool::connect(&url).await {
-            Ok(_) => Ok(TestResult { ok: true, message: "Connected".into() }),
-            Err(e) => Ok(TestResult { ok: false, message: e.to_string() }),
+        match SqlitePoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(low_impact_connect_timeout())
+            .connect(&url)
+            .await
+        {
+            Ok(_) => Ok(TestResult {
+                ok: true,
+                message: "Connected".into(),
+            }),
+            Err(e) => Ok(TestResult {
+                ok: false,
+                message: e.to_string(),
+            }),
         }
     }
 
     pub async fn import(path: &str) -> Result<ImportedSchema, String> {
         let url = format!("sqlite://{}", path);
-        let pool = SqlitePool::connect(&url).await.map_err(|e| e.to_string())?;
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(low_impact_connect_timeout())
+            .connect(&url)
+            .await
+            .map_err(|e| e.to_string())?;
 
         let rows = sqlx::query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
             .fetch_all(&pool)
@@ -412,7 +545,11 @@ mod sqlite_impl {
                 if index_info.len() != 1 {
                     continue;
                 }
-                if let Some(column_name) = index_info[0].try_get::<Option<String>, _>("name").ok().flatten() {
+                if let Some(column_name) = index_info[0]
+                    .try_get::<Option<String>, _>("name")
+                    .ok()
+                    .flatten()
+                {
                     unique_columns.insert(column_name);
                 }
             }
@@ -465,14 +602,25 @@ mod sqlite_impl {
                 let Some(target_table_id) = table_id_map.get(&target_table).cloned() else {
                     continue;
                 };
-                let Some(source_column_id) = table.columns.iter().find(|column| column.name == source_column).map(|column| column.id.clone()) else {
+                let Some(source_column_id) = table
+                    .columns
+                    .iter()
+                    .find(|column| column.name == source_column)
+                    .map(|column| column.id.clone())
+                else {
                     continue;
                 };
                 let Some(target_column_id) = tables
                     .iter()
                     .find(|candidate| candidate.id == target_table_id)
-                    .and_then(|candidate| candidate.columns.iter().find(|column| column.name == target_column))
-                    .map(|column| column.id.clone()) else {
+                    .and_then(|candidate| {
+                        candidate
+                            .columns
+                            .iter()
+                            .find(|column| column.name == target_column)
+                    })
+                    .map(|column| column.id.clone())
+                else {
                     continue;
                 };
 
@@ -507,17 +655,33 @@ mod sqlite_impl {
 #[cfg(feature = "mysql")]
 mod mysql_impl {
     use super::*;
-    use sqlx::{MySqlPool, Row};
+    use sqlx::{mysql::MySqlPoolOptions, Row};
+    use std::collections::HashMap;
+
+    async fn connect(args: &ConnectArgs) -> Result<sqlx::MySqlPool, String> {
+        MySqlPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(low_impact_connect_timeout())
+            .connect(&args.mysql_url())
+            .await
+            .map_err(|e| e.to_string())
+    }
 
     pub async fn test(args: &ConnectArgs) -> Result<TestResult, String> {
-        match MySqlPool::connect(&args.mysql_url()).await {
-            Ok(_) => Ok(TestResult { ok: true, message: "Connected successfully".into() }),
-            Err(e) => Ok(TestResult { ok: false, message: e.to_string() }),
+        match connect(args).await {
+            Ok(_) => Ok(TestResult {
+                ok: true,
+                message: "Connected successfully".into(),
+            }),
+            Err(e) => Ok(TestResult {
+                ok: false,
+                message: e.to_string(),
+            }),
         }
     }
 
     pub async fn import(args: &ConnectArgs, db_name: &str) -> Result<ImportedSchema, String> {
-        let pool = MySqlPool::connect(&args.mysql_url()).await.map_err(|e| e.to_string())?;
+        let pool = connect(args).await?;
         let rows = sqlx::query(
             r#"
             SELECT table_name
@@ -531,55 +695,68 @@ mod mysql_impl {
         .await
         .map_err(|e: sqlx::Error| e.to_string())?;
 
+        let column_rows = sqlx::query(
+            r#"
+            SELECT
+                c.table_name,
+                c.column_name,
+                c.column_type,
+                c.is_nullable,
+                c.column_default,
+                c.column_key,
+                c.extra
+            FROM information_schema.columns c
+            WHERE c.table_schema = ?
+            ORDER BY c.table_name, c.ordinal_position
+            "#,
+        )
+        .bind(db_name)
+        .fetch_all(&pool)
+        .await
+        .map_err(|e: sqlx::Error| e.to_string())?;
+
         let colors = table_colors();
         let mut tables: Vec<SchemaTable> = Vec::new();
-        let mut table_id_map: std::collections::HashMap<String, String> = Default::default();
+        let mut table_id_map: HashMap<String, String> = Default::default();
+        let mut columns_by_table: HashMap<String, Vec<SchemaColumn>> = HashMap::new();
+
+        for column in column_rows {
+            let table_name: String = column.try_get("table_name").map_err(|e| e.to_string())?;
+            let column_type: String = column.try_get("column_type").map_err(|e| e.to_string())?;
+            let column_key: String = column.try_get("column_key").unwrap_or_default();
+            let extra: String = column.try_get("extra").unwrap_or_default();
+            columns_by_table
+                .entry(table_name)
+                .or_default()
+                .push(SchemaColumn {
+                    id: Uuid::new_v4().to_string(),
+                    name: column.try_get("column_name").map_err(|e| e.to_string())?,
+                    col_type: map_mysql_type(&column_type),
+                    nullable: column
+                        .try_get::<String, _>("is_nullable")
+                        .map_err(|e| e.to_string())?
+                        == "YES",
+                    primary_key: column_key == "PRI",
+                    unique: column_key == "PRI" || column_key == "UNI",
+                    default_value: column
+                        .try_get::<Option<String>, _>("column_default")
+                        .unwrap_or_default()
+                        .unwrap_or_else(|| {
+                            if extra.contains("auto_increment") {
+                                "AUTO_INCREMENT".into()
+                            } else {
+                                String::new()
+                            }
+                        }),
+                    comment: String::new(),
+                });
+        }
 
         for (i, row) in rows.iter().enumerate() {
             let table_name: String = row.try_get("table_name").map_err(|e| e.to_string())?;
             let table_id = Uuid::new_v4().to_string();
             table_id_map.insert(table_name.clone(), table_id.clone());
-
-            let column_rows = sqlx::query(
-                r#"
-                SELECT
-                    c.column_name,
-                    c.column_type,
-                    c.is_nullable,
-                    c.column_default,
-                    c.column_key,
-                    c.extra
-                FROM information_schema.columns c
-                WHERE c.table_schema = ? AND c.table_name = ?
-                ORDER BY c.ordinal_position
-                "#,
-            )
-            .bind(db_name)
-            .bind(&table_name)
-            .fetch_all(&pool)
-            .await
-            .map_err(|e: sqlx::Error| e.to_string())?;
-
-            let columns = column_rows
-                .into_iter()
-                .map(|column| {
-                    let column_type: String = column.try_get("column_type").map_err(|e| e.to_string())?;
-                    let column_key: String = column.try_get("column_key").unwrap_or_default();
-                    let extra: String = column.try_get("extra").unwrap_or_default();
-                    Ok(SchemaColumn {
-                        id: Uuid::new_v4().to_string(),
-                        name: column.try_get("column_name").map_err(|e| e.to_string())?,
-                        col_type: map_mysql_type(&column_type),
-                        nullable: column.try_get::<String, _>("is_nullable").map_err(|e| e.to_string())? == "YES",
-                        primary_key: column_key == "PRI",
-                        unique: column_key == "PRI" || column_key == "UNI",
-                        default_value: column.try_get::<Option<String>, _>("column_default").unwrap_or_default().unwrap_or_else(|| {
-                            if extra.contains("auto_increment") { "AUTO_INCREMENT".into() } else { String::new() }
-                        }),
-                        comment: String::new(),
-                    })
-                })
-                .collect::<Result<Vec<_>, String>>()?;
+            let columns = columns_by_table.remove(&table_name).unwrap_or_default();
 
             let x = (i % 3) as f64 * 380.0 + 60.0;
             let y = (i / 3) as f64 * 320.0 + 60.0;
@@ -628,15 +805,27 @@ mod mysql_impl {
             let Some(source_column_id) = tables
                 .iter()
                 .find(|table| table.id == source_table_id)
-                .and_then(|table| table.columns.iter().find(|column| column.name == source_column))
-                .map(|column| column.id.clone()) else {
+                .and_then(|table| {
+                    table
+                        .columns
+                        .iter()
+                        .find(|column| column.name == source_column)
+                })
+                .map(|column| column.id.clone())
+            else {
                 continue;
             };
             let Some(target_column_id) = tables
                 .iter()
                 .find(|table| table.id == target_table_id)
-                .and_then(|table| table.columns.iter().find(|column| column.name == target_column))
-                .map(|column| column.id.clone()) else {
+                .and_then(|table| {
+                    table
+                        .columns
+                        .iter()
+                        .find(|column| column.name == target_column)
+                })
+                .map(|column| column.id.clone())
+            else {
                 continue;
             };
 
@@ -666,6 +855,7 @@ mod mysql_impl {
 #[cfg(feature = "sqlserver")]
 mod sqlserver_impl {
     use super::*;
+    use std::collections::HashMap;
     use tiberius::{AuthMethod, Client, Config, EncryptionLevel, Row, SqlBrowser};
     use tokio::net::TcpStream;
     use tokio_util::compat::{Compat, TokioAsyncWriteCompatExt};
@@ -675,8 +865,6 @@ mod sqlserver_impl {
     struct TableMeta {
         key: String,
         display_name: String,
-        schema_name: String,
-        table_name: String,
     }
 
     fn row_str(row: &Row, name: &str) -> String {
@@ -724,7 +912,10 @@ mod sqlserver_impl {
             .into_first_result()
             .await
             .map_err(|e| e.to_string())?;
-        Ok(TestResult { ok: true, message: "Connected successfully".into() })
+        Ok(TestResult {
+            ok: true,
+            message: "Connected successfully".into(),
+        })
     }
 
     pub async fn import(args: &ConnectArgs, db_name: &str) -> Result<ImportedSchema, String> {
@@ -758,64 +949,70 @@ mod sqlserver_impl {
                 TableMeta {
                     key: format!("{}.{}", schema_name, table_name),
                     display_name,
-                    schema_name,
-                    table_name,
                 }
             })
             .collect::<Vec<_>>();
 
+        let column_rows = client
+            .simple_query(
+                r#"
+                SELECT
+                    c.TABLE_SCHEMA AS table_schema,
+                    c.TABLE_NAME AS table_name,
+                    c.COLUMN_NAME AS column_name,
+                    c.DATA_TYPE AS data_type,
+                    c.IS_NULLABLE AS is_nullable,
+                    COALESCE(c.COLUMN_DEFAULT, '') AS column_default,
+                    CAST(CASE WHEN pk.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END AS int) AS is_pk,
+                    CAST(CASE WHEN uq.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END AS int) AS is_unique
+                FROM INFORMATION_SCHEMA.COLUMNS c
+                LEFT JOIN (
+                    SELECT ku.TABLE_SCHEMA, ku.TABLE_NAME, ku.COLUMN_NAME
+                    FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+                    JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE ku
+                      ON tc.CONSTRAINT_NAME = ku.CONSTRAINT_NAME
+                     AND tc.TABLE_SCHEMA = ku.TABLE_SCHEMA
+                    WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
+                ) pk
+                  ON pk.TABLE_SCHEMA = c.TABLE_SCHEMA
+                 AND pk.TABLE_NAME = c.TABLE_NAME
+                 AND pk.COLUMN_NAME = c.COLUMN_NAME
+                LEFT JOIN (
+                    SELECT ku.TABLE_SCHEMA, ku.TABLE_NAME, ku.COLUMN_NAME
+                    FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+                    JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE ku
+                      ON tc.CONSTRAINT_NAME = ku.CONSTRAINT_NAME
+                     AND tc.TABLE_SCHEMA = ku.TABLE_SCHEMA
+                    WHERE tc.CONSTRAINT_TYPE = 'UNIQUE'
+                ) uq
+                  ON uq.TABLE_SCHEMA = c.TABLE_SCHEMA
+                 AND uq.TABLE_NAME = c.TABLE_NAME
+                 AND uq.COLUMN_NAME = c.COLUMN_NAME
+                WHERE c.TABLE_SCHEMA NOT IN ('INFORMATION_SCHEMA', 'sys')
+                ORDER BY c.TABLE_SCHEMA, c.TABLE_NAME, c.ORDINAL_POSITION
+                "#,
+            )
+            .await
+            .map_err(|e| e.to_string())?
+            .into_first_result()
+            .await
+            .map_err(|e| e.to_string())?;
+
         let colors = table_colors();
         let mut tables: Vec<SchemaTable> = Vec::new();
-        let mut table_id_map: std::collections::HashMap<String, String> = Default::default();
+        let mut table_id_map: HashMap<String, String> = Default::default();
+        let mut columns_by_table: HashMap<String, Vec<SchemaColumn>> = HashMap::new();
 
-        for (i, meta) in metas.iter().enumerate() {
-            let column_rows = client
-                .query(
-                    r#"
-                    SELECT
-                        c.COLUMN_NAME AS column_name,
-                        c.DATA_TYPE AS data_type,
-                        c.IS_NULLABLE AS is_nullable,
-                        COALESCE(c.COLUMN_DEFAULT, '') AS column_default,
-                        CAST(CASE WHEN pk.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END AS int) AS is_pk,
-                        CAST(CASE WHEN uq.COLUMN_NAME IS NOT NULL THEN 1 ELSE 0 END AS int) AS is_unique
-                    FROM INFORMATION_SCHEMA.COLUMNS c
-                    LEFT JOIN (
-                        SELECT ku.TABLE_SCHEMA, ku.TABLE_NAME, ku.COLUMN_NAME
-                        FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-                        JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE ku
-                          ON tc.CONSTRAINT_NAME = ku.CONSTRAINT_NAME
-                         AND tc.TABLE_SCHEMA = ku.TABLE_SCHEMA
-                        WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
-                    ) pk
-                      ON pk.TABLE_SCHEMA = c.TABLE_SCHEMA
-                     AND pk.TABLE_NAME = c.TABLE_NAME
-                     AND pk.COLUMN_NAME = c.COLUMN_NAME
-                    LEFT JOIN (
-                        SELECT ku.TABLE_SCHEMA, ku.TABLE_NAME, ku.COLUMN_NAME
-                        FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-                        JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE ku
-                          ON tc.CONSTRAINT_NAME = ku.CONSTRAINT_NAME
-                         AND tc.TABLE_SCHEMA = ku.TABLE_SCHEMA
-                        WHERE tc.CONSTRAINT_TYPE = 'UNIQUE'
-                    ) uq
-                      ON uq.TABLE_SCHEMA = c.TABLE_SCHEMA
-                     AND uq.TABLE_NAME = c.TABLE_NAME
-                     AND uq.COLUMN_NAME = c.COLUMN_NAME
-                    WHERE c.TABLE_SCHEMA = @P1 AND c.TABLE_NAME = @P2
-                    ORDER BY c.ORDINAL_POSITION
-                    "#,
-                    &[&meta.schema_name.as_str(), &meta.table_name.as_str()],
-                )
-                .await
-                .map_err(|e| e.to_string())?
-                .into_first_result()
-                .await
-                .map_err(|e| e.to_string())?;
-
-            let columns = column_rows
-                .iter()
-                .map(|column| SchemaColumn {
+        for column in &column_rows {
+            let table_key = format!(
+                "{}.{}",
+                row_str(column, "table_schema"),
+                row_str(column, "table_name")
+            );
+            columns_by_table
+                .entry(table_key)
+                .or_default()
+                .push(SchemaColumn {
                     id: Uuid::new_v4().to_string(),
                     name: row_str(column, "column_name"),
                     col_type: map_sqlserver_type(&row_str(column, "data_type")),
@@ -824,8 +1021,11 @@ mod sqlserver_impl {
                     unique: row_i32(column, "is_unique") > 0 || row_i32(column, "is_pk") > 0,
                     default_value: row_str(column, "column_default"),
                     comment: String::new(),
-                })
-                .collect::<Vec<_>>();
+                });
+        }
+
+        for (i, meta) in metas.iter().enumerate() {
+            let columns = columns_by_table.remove(&meta.key).unwrap_or_default();
 
             let table_id = Uuid::new_v4().to_string();
             table_id_map.insert(meta.key.clone(), table_id.clone());
@@ -879,8 +1079,16 @@ mod sqlserver_impl {
 
         let mut relations: Vec<SchemaRelation> = Vec::new();
         for fk in fk_rows {
-            let source_key = format!("{}.{}", row_str(&fk, "source_schema"), row_str(&fk, "source_table"));
-            let target_key = format!("{}.{}", row_str(&fk, "target_schema"), row_str(&fk, "target_table"));
+            let source_key = format!(
+                "{}.{}",
+                row_str(&fk, "source_schema"),
+                row_str(&fk, "source_table")
+            );
+            let target_key = format!(
+                "{}.{}",
+                row_str(&fk, "target_schema"),
+                row_str(&fk, "target_table")
+            );
             let source_column = row_str(&fk, "source_col");
             let target_column = row_str(&fk, "target_col");
 
@@ -893,15 +1101,27 @@ mod sqlserver_impl {
             let Some(source_column_id) = tables
                 .iter()
                 .find(|table| table.id == source_table_id)
-                .and_then(|table| table.columns.iter().find(|column| column.name == source_column))
-                .map(|column| column.id.clone()) else {
+                .and_then(|table| {
+                    table
+                        .columns
+                        .iter()
+                        .find(|column| column.name == source_column)
+                })
+                .map(|column| column.id.clone())
+            else {
                 continue;
             };
             let Some(target_column_id) = tables
                 .iter()
                 .find(|table| table.id == target_table_id)
-                .and_then(|table| table.columns.iter().find(|column| column.name == target_column))
-                .map(|column| column.id.clone()) else {
+                .and_then(|table| {
+                    table
+                        .columns
+                        .iter()
+                        .find(|column| column.name == target_column)
+                })
+                .map(|column| column.id.clone())
+            else {
                 continue;
             };
 
@@ -947,7 +1167,10 @@ pub async fn db_test_connection(args: ConnectArgs) -> Result<TestResult, String>
 
         _ => Ok(TestResult {
             ok: false,
-            message: format!("Dialect '{}' not yet enabled in this build. Add the feature flag.", args.dialect),
+            message: format!(
+                "Dialect '{}' not yet enabled in this build. Add the feature flag.",
+                args.dialect
+            ),
         }),
     }
 }
@@ -981,10 +1204,11 @@ pub async fn db_import_schema(args: ConnectArgs) -> Result<ImportedSchema, Strin
         "sqlserver" => {
             let db = args.database.clone().unwrap_or_else(|| "master".into());
             sqlserver_impl::import(&args, &db).await
-        },
+        }
 
-        _ => Err(format!("Dialect '{}' not supported in this build.", args.dialect)),
+        _ => Err(format!(
+            "Dialect '{}' not supported in this build.",
+            args.dialect
+        )),
     }
 }
-
-

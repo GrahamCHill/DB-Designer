@@ -415,20 +415,15 @@ function downloadOutput() {
 <style scoped>
 .api-overview-panel {
   position: absolute;
-  top: 18px;
-  right: 18px;
-  width: min(980px, calc(100% - 36px));
-  height: min(620px, calc(100% - 36px));
+  inset: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px;
-  border-radius: 16px;
-  border: 1px solid #1a1a24;
+  padding: 18px;
   background: #0d0d12;
-  box-shadow: 0 20px 50px rgb(0, 0, 0);
   z-index: 5;
   pointer-events: auto;
+  overflow: hidden;
   scrollbar-color: #244437 #0f0f15;
 }
 
@@ -763,10 +758,6 @@ h3 {
 
 @media (max-width: 1100px) {
   .api-overview-panel {
-    width: min(720px, calc(100% - 24px));
-    height: min(680px, calc(100% - 24px));
-    top: 12px;
-    right: 12px;
     padding: 14px;
   }
 
@@ -782,6 +773,30 @@ h3 {
     flex-direction: column;
     align-items: flex-start;
     gap: 4px;
+  }
+}
+
+@media (max-width: 720px) {
+  .api-overview-panel {
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .panel-header,
+  .preview-toolbar,
+  .preview-actions {
+    flex-wrap: wrap;
+  }
+
+  .mode-pill {
+    width: 100%;
+    text-align: center;
+  }
+
+  .ghost-btn,
+  .solid-btn,
+  .target-select {
+    width: 100%;
   }
 }
 </style>
