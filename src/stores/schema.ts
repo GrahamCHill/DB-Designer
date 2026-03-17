@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import type { Schema, Table, Column, Relation, TableGroup, SQLDialect } from '../types'
 import { TABLE_WIDTH } from '../types'
+import { normalizeSqlType } from '../types/sqlTypes'
 import { useTabsStore } from './tabs'
 import { saveExportFile } from '../composables/useFileExport'
 import {
@@ -59,9 +60,10 @@ export const useSchemaStore = defineStore('schema', () => {
       color: DEFAULT_COLORS[s.tables.length % DEFAULT_COLORS.length],
       position, groupId,
       groupLocked: false,
+      immutable: false,
       width: TABLE_WIDTH,
       columns: [{ id: uuidv4(), name: 'id', type: 'UUID', nullable: false,
-        primaryKey: true, unique: true, defaultValue: 'gen_random_uuid()', comment: '' }],
+        primaryKey: true, unique: true, immutable: false, defaultValue: 'gen_random_uuid()', comment: '' }],
     }
     s.tables.push(table)
     selectedTableId.value = table.id
@@ -89,7 +91,7 @@ export const useSchemaStore = defineStore('schema', () => {
     if (!table) return
     const col: Column = {
       id: uuidv4(), name: `column_${table.columns.length + 1}`, type: 'VARCHAR',
-      nullable: true, primaryKey: false, unique: false, defaultValue: '', comment: '',
+      nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: '',
     }
     table.columns.push(col)
     persist()
@@ -136,7 +138,7 @@ export const useSchemaStore = defineStore('schema', () => {
   // Relations
 
   function addRelation(relation: Omit<Relation, 'id'>) {
-    const rel: Relation = { id: uuidv4(), ...relation }
+    const rel: Relation = { id: uuidv4(), waypoints: [], ...relation }
     sc().relations.push(rel)
     persist()
     return rel
@@ -277,7 +279,7 @@ export const useSchemaStore = defineStore('schema', () => {
         lines.push(`CREATE TABLE ${table.name} (`)
         const colDefs: string[] = []
         for (const col of table.columns) {
-          let def = `  ${col.name} ${col.type}`
+          let def = `  ${col.name} ${normalizeSqlType(col.type, dialect)}`
           if (col.primaryKey) def += ' PRIMARY KEY'
           if (!col.nullable && !col.primaryKey) def += ' NOT NULL'
           if (col.unique && !col.primaryKey) def += ' UNIQUE'
@@ -285,12 +287,12 @@ export const useSchemaStore = defineStore('schema', () => {
           colDefs.push(def)
         }
         for (const rel of s.relations) {
-          if (rel.sourceTableId === table.id) {
-            const tgt  = s.tables.find(t => t.id === rel.targetTableId)
-            const scol = table.columns.find(c => c.id === rel.sourceColumnId)
-            const tcol = tgt?.columns.find(c => c.id === rel.targetColumnId)
-            if (tgt && scol && tcol)
-              colDefs.push(`  FOREIGN KEY (${scol.name}) REFERENCES ${tgt.name}(${tcol.name})`)
+          if (rel.targetTableId === table.id) {
+            const src  = s.tables.find(t => t.id === rel.sourceTableId)
+            const tcol = table.columns.find(c => c.id === rel.targetColumnId)
+            const scol = src?.columns.find(c => c.id === rel.sourceColumnId)
+            if (src && scol && tcol)
+              colDefs.push(`  FOREIGN KEY (${tcol.name}) REFERENCES ${src.name}(${scol.name})`)
           }
         }
         lines.push(colDefs.join(',\n')); lines.push(');'); lines.push('')
@@ -311,10 +313,20 @@ export const useSchemaStore = defineStore('schema', () => {
 
   function loadFromJSON(json: Schema) {
     if (!json.groups) json.groups = []
+    if (!json.relations) json.relations = []
     // @ts-ignore
     json.groups = json.groups.map(g => ({ parentGroupId: null, ...g }))
     // @ts-ignore
-    json.tables = json.tables.map(t => ({ groupId: null, groupLocked: false, width: TABLE_WIDTH, ...t }))
+    json.relations = json.relations.map(r => ({ waypoints: [], ...r }))
+    // @ts-ignore
+    json.tables = json.tables.map(t => ({
+      groupId: null,
+      groupLocked: false,
+      immutable: false,
+      width: TABLE_WIDTH,
+      ...t,
+      columns: (t.columns ?? []).map(c => ({ immutable: false, ...c })),
+    }))
     tabsStore.loadSchemaIntoNewTab(json)
     clearSelection()
   }

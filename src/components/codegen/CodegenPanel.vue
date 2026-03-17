@@ -93,6 +93,10 @@
             <div v-if="!activeTables.length" class="tbl-empty">Load a schema first</div>
           </div>
         </div>
+        <div class="cg-footer">
+          <span class="cg-footer-autosave">auto-saved</span>
+          <span class="cg-footer-version">{{ appVersionLabel }}</span>
+        </div>
       </div>
     </aside>
 
@@ -122,6 +126,8 @@ import { saveExportFile } from '../../composables/useFileExport'
 import { useSchemaStore }    from '../../stores/schema'
 
 const dbStore = useSchemaStore()
+const appVersion = (import.meta.env.VITE_APP_VERSION || '').trim()
+const appVersionLabel = appVersion ? `v${appVersion}` : 'dev'
 type CodegenLanguage = 'typescript' | 'go' | 'rust' | 'python' | 'java' | 'kotlin' | 'csharp' | 'cpp'
 
 const languages: { id: CodegenLanguage; label: string; icon: string }[] = [
@@ -709,6 +715,31 @@ defineExpose({ copyAll, downloadAll })
 .tbl-name { flex: 1; font-size: 11.5px; color: #b0b0c8; }
 .tbl-cnt  { font-size: 9.5px; color: #38384e; }
 .tbl-empty { font-size: 11px; color: #2a2a3a; font-style: italic; text-align: center; padding: 16px; }
+
+.cg-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-top: 1px solid #181820;
+  flex-shrink: 0;
+}
+
+.cg-footer-autosave {
+  font-size: 10px;
+  color: #3ecf8e80;
+  letter-spacing: 0.02em;
+}
+
+.cg-footer-version {
+  margin-left: auto;
+  font-size: 10px;
+  color: #7a7a8c;
+  background: #1a1a22;
+  padding: 2px 6px;
+  border-radius: 8px;
+  letter-spacing: 0.06em;
+}
 
 /* Action buttons */
 .btn-copy, .btn-download {

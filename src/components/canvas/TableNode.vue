@@ -37,7 +37,12 @@
         v-for="col in table.columns"
         :key="col.id"
         class="column-row"
-        :class="{ 'is-pk': col.primaryKey }"
+        :class="{
+          'is-pk': col.primaryKey,
+          'has-type-mismatch': mismatchedColumns.has(col.id),
+          'has-connection-error': invalidColumns.has(col.id),
+        }"
+        :title="columnIssues[col.id]?.join(' | ') ?? ''"
       >
         <!-- LEFT = input connector -->
         <div
@@ -101,6 +106,9 @@ defineProps<{
   drawingRel: boolean
   connectedAsSource: Set<string>
   connectedAsTarget: Set<string>
+  mismatchedColumns: Set<string>
+  invalidColumns: Set<string>
+  columnIssues: Record<string, string[]>
   readOnly?: boolean
 }>()
 
@@ -191,6 +199,21 @@ function hexToRgb(hex: string): string {
 .column-row:hover       { background: #1e1e25; }
 .column-row.is-pk       { background: #1a1f1a; }
 .column-row.is-pk:hover { background: #1e2620; }
+.column-row.has-type-mismatch {
+  background: rgba(245, 158, 11, 0.12);
+  box-shadow: inset 2px 0 0 #F59E0B;
+}
+.column-row.has-connection-error {
+  background: rgba(239, 68, 68, 0.12);
+  box-shadow: inset 2px 0 0 #EF4444;
+}
+.column-row.has-type-mismatch .col-type,
+.column-row.has-connection-error .col-type {
+  color: #f3b36b;
+}
+.column-row.has-connection-error .col-name {
+  color: #f2b1b1;
+}
 
 /* Connectors */
 .connector {

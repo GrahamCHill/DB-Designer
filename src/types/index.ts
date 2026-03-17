@@ -1,11 +1,4 @@
-export type ColumnType =
-  | 'INTEGER' | 'BIGINT' | 'SMALLINT' | 'SERIAL' | 'BIGSERIAL'
-  | 'VARCHAR' | 'TEXT' | 'CHAR'
-  | 'BOOLEAN'
-  | 'FLOAT' | 'DOUBLE' | 'DECIMAL' | 'NUMERIC'
-  | 'DATE' | 'TIME' | 'TIMESTAMP' | 'TIMESTAMPTZ'
-  | 'UUID' | 'JSON' | 'JSONB'
-  | 'BYTEA' | 'ARRAY'
+export type ColumnType = string
 
 export interface Column {
   id: string
@@ -14,6 +7,7 @@ export interface Column {
   nullable: boolean
   primaryKey: boolean
   unique: boolean
+  immutable: boolean
   defaultValue: string
   comment: string
 }
@@ -27,6 +21,7 @@ export interface Table {
   position: { x: number; y: number }
   groupId: string | null
   groupLocked: boolean
+  immutable: boolean
   width: number            // px, defaults to TABLE_WIDTH   // when true, groupId cannot be changed by geometry or drag
 }
 
@@ -40,6 +35,7 @@ export interface Relation {
   targetColumnId: string
   type: RelationType
   label: string
+  waypoints?: { x: number; y: number }[]
 }
 
 export interface TableGroup {
@@ -62,7 +58,7 @@ export interface Schema {
   updatedAt: string
 }
 
-export type SQLDialect = 'postgresql' | 'mysql' | 'sqlite'
+export type SQLDialect = 'postgresql' | 'mysql' | 'sqlite' | 'sqlserver'
 
 // Layout constants — single source of truth used by canvas SVG math
 export const TABLE_WIDTH = 320

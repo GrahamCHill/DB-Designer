@@ -52,6 +52,7 @@ const dialects: { label: string; value: SQLDialect }[] = [
   { label: 'PostgreSQL', value: 'postgresql' },
   { label: 'MySQL', value: 'mysql' },
   { label: 'SQLite', value: 'sqlite' },
+  { label: 'SQL Server', value: 'sqlserver' },
 ]
 
 const dialect = ref<SQLDialect>('postgresql')

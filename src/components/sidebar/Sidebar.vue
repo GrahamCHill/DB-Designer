@@ -3,8 +3,24 @@
     <!-- Brand -->
     <div class="brand">
       <span class="brand-icon">⬡</span>
-      <span class="brand-name">DB Designer</span>
-      <span class="brand-version">v2</span>
+      <div class="brand-copy">
+        <span class="brand-name">DB Designer</span>
+      </div>
+      <div class="brand-help">
+        <button
+          class="brand-help-btn"
+          type="button"
+          aria-label="Designer tips"
+          title="Designer tips"
+        >?</button>
+        <div class="brand-help-popover">
+          <strong>Canvas tips</strong>
+          <span>Double-click a relation line to add a diverter.</span>
+          <span>Drag diverters to route lines without changing the schema.</span>
+          <span>Double-click a diverter to remove it.</span>
+          <span>Hover a red X or highlighted field to see the relation error.</span>
+        </div>
+      </div>
     </div>
 
     <!-- Project actions -->
@@ -213,15 +229,15 @@
     <div v-if="store.selectedRelationId && !store.selectedTable && !store.selectedGroup" class="sidebar-section inspector">
       <label class="section-label">Relation</label>
       <div v-if="selectedRelation" class="relation-display">
-        <span class="rel-table">{{ sourceTable?.name }}</span>
-        <span class="rel-col">.{{ sourceCol?.name }}</span>
-        <span class="rel-arrow">→</span>
         <span class="rel-table">{{ targetTable?.name }}</span>
         <span class="rel-col">.{{ targetCol?.name }}</span>
+        <span class="rel-arrow">→</span>
+        <span class="rel-table">{{ sourceTable?.name }}</span>
+        <span class="rel-col">.{{ sourceCol?.name }}</span>
       </div>
       <button class="btn-ghost-action danger" style="width:100%;margin-top:8px"
         @click="store.deleteRelation(store.selectedRelationId!)">
-        ✕ Delete Relation
+        Delete Relation
       </button>
     </div>
 
@@ -234,6 +250,7 @@
     <!-- Footer -->
     <div class="sidebar-footer">
       <span class="autosave-indicator">● auto-saved</span>
+      <span class="sidebar-version">{{ appVersionLabel }}</span>
     </div>
 
 
@@ -249,6 +266,8 @@ import type { Schema } from '../../types'
 
 const store = useSchemaStore()
 const showExport = ref(false)
+const appVersion = (import.meta.env.VITE_APP_VERSION || '').trim()
+const appVersionLabel = appVersion ? `v${appVersion}` : 'dev'
 
 // ── Drag state ────────────────────────────────────────────────────────────────
 
@@ -421,10 +440,61 @@ function loadFile(e: Event) {
 }
 
 /* Brand */
-.brand { display: flex; align-items: center; gap: 8px; padding: 14px 14px 12px; border-bottom: 1px solid #1c1c24; }
-.brand-icon    { font-size: 18px; color: #3ECF8E; }
-.brand-name    { font-size: 13px; font-weight: 700; color: #f0f0f0; letter-spacing: 0.04em; flex: 1; }
-.brand-version { font-size: 10px; color: #333; background: #1a1a22; padding: 2px 6px; border-radius: 8px; }
+.brand { display: flex; align-items: flex-start; gap: 8px; padding: 14px 14px 12px; border-bottom: 1px solid #1c1c24; }
+.brand-icon    { font-size: 18px; color: #3ECF8E; margin-top: 1px; }
+.brand-copy    { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.brand-name    { font-size: 13px; font-weight: 700; color: #f0f0f0; letter-spacing: 0.04em; }
+.brand-help { position: relative; }
+.brand-help-btn {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 1px solid #2a2a35;
+  background: #17171d;
+  color: #8f90a6;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: help;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.brand-help-btn:hover,
+.brand-help:focus-within .brand-help-btn {
+  color: #f0f0f0;
+  border-color: #3ECF8E50;
+  background: #1d1d24;
+}
+.brand-help-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 11px;
+  border-radius: 10px;
+  border: 1px solid #2a2a35;
+  background: #121219;
+  box-shadow: 0 10px 28px #00000066;
+  color: #b7b7c9;
+  font-size: 11px;
+  line-height: 1.45;
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity 0.15s, transform 0.15s;
+  z-index: 20;
+}
+.brand-help-popover strong {
+  color: #f0f0f0;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.brand-help:hover .brand-help-popover,
+.brand-help:focus-within .brand-help-popover {
+  opacity: 1;
+  transform: translateY(0);
+}
 
 /* Sections */
 .sidebar-section { padding: 10px 12px; border-bottom: 1px solid #181820; }
@@ -616,7 +686,16 @@ function loadFile(e: Event) {
 }
 .btn-connect:hover { background: #1a1e2e; }
 
-.sidebar-footer { padding: 8px 14px; border-top: 1px solid #181820; display: flex; justify-content: flex-end; }
+.sidebar-footer { padding: 8px 14px; border-top: 1px solid #181820; display: flex; align-items: center; gap: 8px; }
+.sidebar-version {
+  margin-left: auto;
+  font-size: 10px;
+  color: #7a7a8c;
+  background: #1a1a22;
+  padding: 2px 6px;
+  border-radius: 8px;
+  letter-spacing: 0.06em;
+}
 .autosave-indicator { font-size: 10px; color: #3ECF8E50; letter-spacing: 0.02em; }
 
 .view-options {

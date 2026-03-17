@@ -37,7 +37,7 @@
             <span class="pt-dot" :style="{ background: table.color }" />
             <span class="pt-name">{{ table.name }}</span>
             <span class="pt-cols">{{ table.columns.length }}c</span>
-            <span class="pt-add">{{ isOnCanvas(table.name) ? '•' : '+' }}</span>
+            <span class="pt-add">{{ isOnCanvas(table.name) ? 'ï¿½' : '+' }}</span>
           </div>
           <div v-if="!schemaTables.length" class="palette-empty">Load a schema first</div>
         </div>
@@ -117,6 +117,11 @@
       <div v-if="query.tables.length" class="qs-section">
         <button class="btn-reset" @click="query.reset">Reset Query</button>
       </div>
+
+      <div class="qfooter">
+        <span class="qfooter-autosave">auto-saved</span>
+        <span class="qfooter-version">{{ appVersionLabel }}</span>
+      </div>
     </div>
   </aside>
 </template>
@@ -128,6 +133,8 @@ import { useSchemaStore } from '../../stores/schema'
 
 const query = useQueryStore()
 const dbStore = useSchemaStore()
+const appVersion = (import.meta.env.VITE_APP_VERSION || '').trim()
+const appVersionLabel = appVersion ? `v${appVersion}` : 'dev'
 
 const ops = ['=', '!=', '>', '>=', '<', '<=', 'LIKE', 'IN', 'IS NULL', 'IS NOT NULL']
 
@@ -482,6 +489,31 @@ function columnsFor(alias: string) {
   color: #ef444480;
   font-size: 10px;
   padding: 6px;
+}
+
+.qfooter {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid #181820;
+}
+
+.qfooter-autosave {
+  font-size: 10px;
+  color: #3ecf8e80;
+  letter-spacing: 0.02em;
+}
+
+.qfooter-version {
+  margin-left: auto;
+  font-size: 10px;
+  color: #7a7a8c;
+  background: #1a1a22;
+  padding: 2px 6px;
+  border-radius: 8px;
+  letter-spacing: 0.06em;
 }
 </style>
 

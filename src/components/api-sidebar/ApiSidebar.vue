@@ -185,6 +185,7 @@
 
     <div class="sidebar-footer">
       <span class="autosave">auto-saved</span>
+      <span class="sidebar-version">{{ appVersionLabel }}</span>
     </div>
 
     <EndpointEditor  v-if="editingEndpoint"  :node="editingEndpoint"  @close="store.editingNodeId = null" />
@@ -209,6 +210,8 @@ import ServiceEditor from '../api-modals/ServiceEditor.vue'
 
 const store = useApiStore()
 const dbStore = useSchemaStore()
+const appVersion = (import.meta.env.VITE_APP_VERSION || '').trim()
+const appVersionLabel = appVersion ? `v${appVersion}` : 'dev'
 
 const modes = [
   { id: 'rest' as const, label: 'REST', icon: 'R' },
@@ -913,11 +916,24 @@ function importTable(table: any) {
 .sidebar-footer {
   padding: 8px 14px;
   border-top: 1px solid #181820;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .autosave {
   font-size: 10px;
   color: #3ecf8e80;
   letter-spacing: 0.02em;
+}
+
+.sidebar-version {
+  margin-left: auto;
+  font-size: 10px;
+  color: #7a7a8c;
+  background: #1a1a22;
+  padding: 2px 6px;
+  border-radius: 8px;
+  letter-spacing: 0.06em;
 }
 </style>

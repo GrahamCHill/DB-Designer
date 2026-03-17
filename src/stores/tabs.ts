@@ -58,9 +58,16 @@ function loadSchema(schemaId: string): Schema | null {
     if (raw) {
       const s = JSON.parse(raw) as Schema
       if (!s.groups) s.groups = []
+      if (!s.relations) s.relations = []
+      s.relations = s.relations.map(r => ({ waypoints: [], ...r }))
       s.tables = s.tables.map(t => {
         // @ts-ignore
-        return ({groupId: null, ...t});
+        return ({
+          groupId: null,
+          immutable: false,
+          ...t,
+          columns: (t.columns ?? []).map(c => ({ immutable: false, ...c })),
+        });
       })
       return s
     }

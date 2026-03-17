@@ -35,7 +35,9 @@
           <path
             :d="getRelationPath(rel)"
             fill="none"
-            :stroke="store.selectedRelationId === rel.id ? '#3ECF8E' : '#3ECF8E55'"
+            :stroke="relationValidationById.get(rel.id)?.hasError
+              ? (store.selectedRelationId === rel.id ? '#EF4444' : '#EF444488')
+              : (store.selectedRelationId === rel.id ? '#3ECF8E' : '#3ECF8E55')"
             :stroke-width="store.selectedRelationId === rel.id ? 2 : 1.5"
             stroke-dasharray="5,3"
             marker-end="url(#arrow-end)"
@@ -46,13 +48,31 @@
             fill="none" stroke="transparent" stroke-width="14"
             class="relation-hit"
             @click.stop="selectRelation(rel.id)"
-          />
+            @dblclick.stop="addRelationWaypoint(rel.id)"
+          >
+            <title>{{ relationValidationById.get(rel.id)?.messages.join(' | ') || 'Valid relation' }}</title>
+          </path>
           <!-- Cardinality labels -->
           <g v-if="relLabelPos(rel)" class="rel-labels">
             <text :x="relLabelPos(rel)!.src.x" :y="relLabelPos(rel)!.src.y" class="rel-label"
               :fill="store.selectedRelationId === rel.id ? '#3ECF8E' : '#3ECF8E99'">{{ srcLabel(rel.type) }}</text>
             <text :x="relLabelPos(rel)!.tgt.x" :y="relLabelPos(rel)!.tgt.y" class="rel-label"
               :fill="store.selectedRelationId === rel.id ? '#3ECF8E' : '#3ECF8E99'">{{ tgtLabel(rel.type) }}</text>
+          </g>
+          <g v-if="relationValidationById.get(rel.id)?.hasError" class="rel-error">
+            <circle :cx="relationPathMidpoint(rel).x" :cy="relationPathMidpoint(rel).y" r="10" />
+            <text :x="relationPathMidpoint(rel).x" :y="relationPathMidpoint(rel).y + 4" class="rel-error-text">X</text>
+            <title>{{ relationValidationById.get(rel.id)?.messages.join(' | ') }}</title>
+          </g>
+          <g
+            v-for="(waypoint, index) in relationWaypointById[rel.id] ?? rel.waypoints ?? []"
+            :key="`${rel.id}-${index}`"
+            class="rel-waypoint"
+            @mousedown.stop="startRelationWaypointDrag(rel.id, index, $event)"
+            @dblclick.stop="removeRelationWaypoint(rel.id, index)"
+          >
+            <circle :cx="waypoint.x" :cy="waypoint.y" r="7" />
+            <title>Drag to bend this relation visually. Double-click to remove this diverter.</title>
           </g>
         </g>
 
@@ -72,6 +92,9 @@
         :drawing-rel="!!drawingRel"
         :connected-as-source="sourceColsByTable.get(table.id) ?? emptySet"
         :connected-as-target="targetColsByTable.get(table.id) ?? emptySet"
+        :mismatched-columns="mismatchedColsByTable.get(table.id) ?? emptySet"
+        :invalid-columns="invalidColsByTable.get(table.id) ?? emptySet"
+        :column-issues="columnIssuesByTable.get(table.id) ?? emptyIssues"
         :read-only="readOnly && !interactive"
         @mousedown.stop="!readOnly && startTableDrag(table.id, $event)"
         @select="selectTable(table.id)"
@@ -99,7 +122,7 @@
         @click="store.updateRelation(store.selectedRelationId!, { type: type.value })">
         {{ type.label }}
       </button>
-      <button class="rel-type-del" @click="store.deleteRelation(store.selectedRelationId!)">âœ• Delete</button>
+      <button class="rel-type-del" @click="store.deleteRelation(store.selectedRelationId!)">Delete Relation</button>
     </div>
 
     <!-- Zoom controls -->
@@ -124,7 +147,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
 import { useSchemaStore } from '../../stores/schema'
 import TableNode from './TableNode.vue'
 import GroupNode from './GroupNode.vue'
@@ -133,6 +156,7 @@ import GroupEditorModal from '../modals/GroupEditorModal.vue'
 import type { Relation, RelationType } from '../../types'
 import { TABLE_WIDTH, TABLE_HEADER_H, TABLE_COL_PAD_TOP, TABLE_ROW_H } from '../../types'
 import { getDescendants } from '../../composables/useContainment'
+import { areSqlTypesCompatible } from '../../types/sqlTypes'
 
 defineProps<{
   readOnly?: boolean
@@ -141,6 +165,7 @@ defineProps<{
 
 const store = useSchemaStore()
 const emptySet = new Set<string>()  // stable empty set so Vue doesn't re-render every frame
+const emptyIssues: Record<string, string[]> = {}
 const canvasEl = ref<HTMLDivElement>()
 const canvasW  = ref(800)
 const canvasH  = ref(600)
@@ -165,6 +190,8 @@ onMounted(() => {
     }
   }
   window.addEventListener('keydown', onKeyDown)
+  window.addEventListener('mouseup', onWindowMouseUp, true)
+  window.addEventListener('blur', onWindowBlur)
   // Clean up on unmount would need onUnmounted â€” skipping for now as canvas lives for app lifetime
 
   if (canvasEl.value && typeof ResizeObserver !== 'undefined') {
@@ -176,6 +203,11 @@ onMounted(() => {
     })
     ro.observe(canvasEl.value)
   }
+})
+
+onUnmounted(() => {
+  window.removeEventListener('mouseup', onWindowMouseUp, true)
+  window.removeEventListener('blur', onWindowBlur)
 })
 
 const REL_TYPES: { value: RelationType; label: string }[] = [
@@ -245,14 +277,22 @@ type ResizeDrag = {
   origW: number; origH: number
 }
 
+type RelationWaypointDrag = {
+  kind: 'relation-waypoint'
+  id: string
+  waypointIndex: number
+  origX: number; origY: number
+}
+
 type PanDrag = { kind: 'pan' }
 
-type AnyDrag = (TableDrag | TableResizeDrag | GroupDrag | ResizeDrag | PanDrag) & {
+type AnyDrag = (TableDrag | TableResizeDrag | GroupDrag | ResizeDrag | RelationWaypointDrag | PanDrag) & {
   startClientX: number
   startClientY: number
 }
 
 const drag = ref<AnyDrag | null>(null)
+const relationWaypointById = reactive<Record<string, { x: number; y: number }[]>>({})
 
 // â”€â”€ Relation drawing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const drawingRel = ref<{
@@ -280,16 +320,51 @@ function connectorPos(tableId: string, colId: string, side: 'left' | 'right') {
   }
 }
 
-function makeCurve(a: { x: number; y: number }, b: { x: number; y: number }) {
+function makeCurveSegment(a: { x: number; y: number }, b: { x: number; y: number }, move = true) {
   const cx = Math.max(Math.abs(b.x - a.x) * 0.5, 80)
-  return `M ${a.x} ${a.y} C ${a.x + cx} ${a.y}, ${b.x - cx} ${b.y}, ${b.x} ${b.y}`
+  return `${move ? `M ${a.x} ${a.y} ` : ''}C ${a.x + cx} ${a.y}, ${b.x - cx} ${b.y}, ${b.x} ${b.y}`
+}
+
+function makeCurve(a: { x: number; y: number }, b: { x: number; y: number }) {
+  return makeCurveSegment(a, b)
+}
+
+function bezierControls(a: { x: number; y: number }, b: { x: number; y: number }) {
+  const cx = Math.max(Math.abs(b.x - a.x) * 0.5, 80)
+  return {
+    c1: { x: a.x + cx, y: a.y },
+    c2: { x: b.x - cx, y: b.y },
+  }
+}
+
+function cubicPoint(
+  a: { x: number; y: number },
+  c1: { x: number; y: number },
+  c2: { x: number; y: number },
+  b: { x: number; y: number },
+  t: number,
+) {
+  const mt = 1 - t
+  return {
+    x: mt ** 3 * a.x + 3 * mt ** 2 * t * c1.x + 3 * mt * t ** 2 * c2.x + t ** 3 * b.x,
+    y: mt ** 3 * a.y + 3 * mt ** 2 * t * c1.y + 3 * mt * t ** 2 * c2.y + t ** 3 * b.y,
+  }
+}
+
+function relationRoutePoints(rel: Relation) {
+  const src = connectorPos(rel.sourceTableId, rel.sourceColumnId, 'right')
+  const tgt = connectorPos(rel.targetTableId, rel.targetColumnId, 'left')
+  return [src, ...(relationWaypointById[rel.id] ?? rel.waypoints ?? []), tgt]
 }
 
 function getRelationPath(rel: Relation) {
-  return makeCurve(
-    connectorPos(rel.sourceTableId, rel.sourceColumnId, 'right'),
-    connectorPos(rel.targetTableId, rel.targetColumnId, 'left'),
-  )
+  const points = relationRoutePoints(rel)
+  if (points.length === 2) return makeCurve(points[0], points[1])
+
+  return points
+    .slice(0, -1)
+    .map((point, index) => makeCurveSegment(point, points[index + 1], index === 0))
+    .join(' ')
 }
 
 function relLabelPos(rel: Relation) {
@@ -299,6 +374,36 @@ function relLabelPos(rel: Relation) {
     src: { x: src.x + 14, y: src.y - 6 },
     tgt: { x: tgt.x - 22, y: tgt.y - 6 },
   }
+}
+
+function relationMidpoint(rel: Relation) {
+  const src = connectorPos(rel.sourceTableId, rel.sourceColumnId, 'right')
+  const tgt = connectorPos(rel.targetTableId, rel.targetColumnId, 'left')
+  return { x: (src.x + tgt.x) / 2, y: (src.y + tgt.y) / 2 }
+}
+
+function relationPathMidpoint(rel: Relation) {
+  const points = relationRoutePoints(rel)
+  const samples: { x: number; y: number; distance: number }[] = []
+  let total = 0
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i]
+    const b = points[i + 1]
+    const { c1, c2 } = bezierControls(a, b)
+    let prev = a
+
+    for (let step = 1; step <= 24; step++) {
+      const point = cubicPoint(a, c1, c2, b, step / 24)
+      total += Math.hypot(point.x - prev.x, point.y - prev.y)
+      samples.push({ ...point, distance: total })
+      prev = point
+    }
+  }
+
+  if (samples.length === 0) return relationMidpoint(rel)
+  const half = total / 2
+  return samples.find(sample => sample.distance >= half) ?? samples[samples.length - 1]
 }
 
 function srcLabel(type: RelationType) { return type === 'many-to-many' ? 'N' : '1' }
@@ -320,6 +425,53 @@ const selectedRelData = computed(() =>
   store.schema.relations.find(r => r.id === store.selectedRelationId) ?? null
 )
 
+const relationValidationById = computed(() => {
+  const map = new Map<string, {
+    hasError: boolean
+    typeMismatch: boolean
+    invalidTarget: boolean
+    messages: string[]
+  }>()
+
+  for (const rel of store.schema.relations) {
+    const sourceTable = store.schema.tables.find(t => t.id === rel.sourceTableId)
+    const targetTable = store.schema.tables.find(t => t.id === rel.targetTableId)
+    const sourceCol = sourceTable?.columns.find(c => c.id === rel.sourceColumnId)
+    const targetCol = targetTable?.columns.find(c => c.id === rel.targetColumnId)
+    const messages: string[] = []
+
+    if (!sourceCol) messages.push('Referenced column no longer exists.')
+    if (!targetCol) messages.push('Foreign key column no longer exists.')
+
+    const typeMismatch = !!(sourceCol && targetCol && !areSqlTypesCompatible(sourceCol.type, targetCol.type))
+    if (typeMismatch && sourceCol && targetCol) {
+      messages.push(`Type mismatch: ${targetCol.type} cannot safely reference ${sourceCol.type}.`)
+    }
+
+    const invalidTarget = !!(sourceCol && !sourceCol.primaryKey && !sourceCol.unique)
+    if (invalidTarget) {
+      messages.push('Referenced column should be PRIMARY KEY or UNIQUE.')
+    }
+
+    if (rel.type === 'one-to-one' && targetCol && !targetCol.primaryKey && !targetCol.unique) {
+      messages.push('One-to-one relations require the foreign key column to be UNIQUE or PRIMARY KEY.')
+    }
+
+    if (rel.type === 'many-to-many') {
+      messages.push('Many-to-many needs a junction table. This direct connection will not generate a valid DB constraint.')
+    }
+
+    map.set(rel.id, {
+      hasError: messages.length > 0,
+      typeMismatch,
+      invalidTarget,
+      messages,
+    })
+  }
+
+  return map
+})
+
 // For each table: which column IDs appear as sources (right/output) of any relation
 const sourceColsByTable = computed(() => {
   const map = new Map<string, Set<string>>()
@@ -337,6 +489,61 @@ const targetColsByTable = computed(() => {
     if (!map.has(rel.targetTableId)) map.set(rel.targetTableId, new Set())
     map.get(rel.targetTableId)!.add(rel.targetColumnId)
   }
+  return map
+})
+
+const mismatchedColsByTable = computed(() => {
+  const map = new Map<string, Set<string>>()
+  for (const rel of store.schema.relations) {
+    const validation = relationValidationById.value.get(rel.id)
+    if (!validation?.typeMismatch) continue
+    if (!map.has(rel.sourceTableId)) map.set(rel.sourceTableId, new Set())
+    if (!map.has(rel.targetTableId)) map.set(rel.targetTableId, new Set())
+    map.get(rel.sourceTableId)!.add(rel.sourceColumnId)
+    map.get(rel.targetTableId)!.add(rel.targetColumnId)
+  }
+  return map
+})
+
+const invalidColsByTable = computed(() => {
+  const map = new Map<string, Set<string>>()
+  for (const rel of store.schema.relations) {
+    const validation = relationValidationById.value.get(rel.id)
+    if (!validation?.invalidTarget) continue
+    if (!map.has(rel.sourceTableId)) map.set(rel.sourceTableId, new Set())
+    map.get(rel.sourceTableId)!.add(rel.sourceColumnId)
+  }
+  return map
+})
+
+const columnIssuesByTable = computed(() => {
+  const map = new Map<string, Record<string, string[]>>()
+  const pushIssue = (tableId: string, columnId: string, message: string) => {
+    if (!map.has(tableId)) map.set(tableId, {})
+    const tableIssues = map.get(tableId)!
+    if (!tableIssues[columnId]) tableIssues[columnId] = []
+    if (!tableIssues[columnId].includes(message)) tableIssues[columnId].push(message)
+  }
+
+  for (const rel of store.schema.relations) {
+    const validation = relationValidationById.value.get(rel.id)
+    if (!validation) continue
+
+    if (validation.typeMismatch) {
+      pushIssue(rel.sourceTableId, rel.sourceColumnId, 'Connected column type is incompatible with this relation.')
+      pushIssue(rel.targetTableId, rel.targetColumnId, 'Connected column type is incompatible with this relation.')
+    }
+
+    if (validation.invalidTarget) {
+      pushIssue(rel.sourceTableId, rel.sourceColumnId, 'This referenced column is not PRIMARY KEY or UNIQUE.')
+    }
+
+    for (const message of validation.messages) {
+      if (rel.sourceColumnId) pushIssue(rel.sourceTableId, rel.sourceColumnId, message)
+      if (rel.targetColumnId) pushIssue(rel.targetTableId, rel.targetColumnId, message)
+    }
+  }
+
   return map
 })
 
@@ -411,12 +618,16 @@ function onMouseMove(e: MouseEvent) {
       w: Math.max(200, d.origW + dx),
       h: Math.max(120, d.origH + dy),
     })
+
+  } else if (d.kind === 'relation-waypoint') {
+    if (!relationWaypointById[d.id]) return
+    relationWaypointById[d.id][d.waypointIndex] = { x: d.origX + dx, y: d.origY + dy }
   }
 }
 
 // â”€â”€ Mouse up â€” commit containment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-function onMouseUp() {
+function commitActiveDrag() {
   if (!drag.value) return
   const d = drag.value
   drag.value = null   // clear first so re-entrant events don't double-fire
@@ -436,7 +647,33 @@ function onMouseUp() {
   } else if (d.kind === 'resize') {
     // S2: already live during resize; just persist
     store.commitGroupSize(d.id)
+  } else if (d.kind === 'relation-waypoint') {
+    const rel = store.schema.relations.find(current => current.id === d.id)
+    if (rel) {
+      const next = relationWaypointById[d.id] ?? rel.waypoints ?? []
+      store.updateRelation(d.id, { waypoints: next })
+      if (next.length === 0) delete relationWaypointById[d.id]
+      else relationWaypointById[d.id] = [...next]
+    }
   }
+}
+
+function onMouseUp() {
+  commitActiveDrag()
+}
+
+function onWindowMouseUp() {
+  commitActiveDrag()
+  if (drawingRel.value) {
+    window.setTimeout(() => {
+      if (drawingRel.value) drawingRel.value = null
+    }, 0)
+  }
+}
+
+function onWindowBlur() {
+  commitActiveDrag()
+  drawingRel.value = null
 }
 
 // â”€â”€ Wheel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -550,6 +787,44 @@ function startGroupResize(groupId: string, e: MouseEvent) {
   }
 }
 
+function startRelationWaypointDrag(relationId: string, waypointIndex: number, e: MouseEvent) {
+  const handle = (relationWaypointById[relationId]
+    ?? store.schema.relations.find(current => current.id === relationId)?.waypoints
+    ?? [])[waypointIndex]
+  if (!handle) return
+  relationWaypointById[relationId] = [
+    ...(relationWaypointById[relationId]
+      ?? store.schema.relations.find(current => current.id === relationId)?.waypoints
+      ?? []),
+  ]
+  drag.value = {
+    kind: 'relation-waypoint',
+    id: relationId,
+    waypointIndex,
+    origX: handle.x,
+    origY: handle.y,
+    startClientX: e.clientX,
+    startClientY: e.clientY,
+  }
+}
+
+function addRelationWaypoint(relationId: string) {
+  const rel = store.schema.relations.find(current => current.id === relationId)
+  if (!rel) return
+  const next = [...(relationWaypointById[relationId] ?? rel.waypoints ?? []), relationPathMidpoint(rel)]
+  relationWaypointById[relationId] = next
+  store.updateRelation(relationId, { waypoints: next })
+}
+
+function removeRelationWaypoint(relationId: string, waypointIndex: number) {
+  const rel = store.schema.relations.find(current => current.id === relationId)
+  const next = [...(relationWaypointById[relationId] ?? rel?.waypoints ?? [])]
+  next.splice(waypointIndex, 1)
+  if (next.length === 0) delete relationWaypointById[relationId]
+  else relationWaypointById[relationId] = next
+  store.updateRelation(relationId, { waypoints: next })
+}
+
 // â”€â”€ Relation drawing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function startRelation(tableId: string, columnId: string) {
@@ -608,6 +883,8 @@ function selectRelation(id: string) {
 }
 
 .relation-hit { pointer-events: stroke; cursor: pointer; }
+.rel-error { pointer-events: all; }
+.rel-waypoint { pointer-events: all; }
 
 .rel-label {
   font-size: 11px; font-weight: 700;
@@ -615,6 +892,28 @@ function selectRelation(id: string) {
   pointer-events: none; dominant-baseline: auto; text-anchor: middle;
 }
 .rel-labels { pointer-events: none; }
+.rel-error circle {
+  fill: #19090b;
+  stroke: #EF4444;
+  stroke-width: 1.5;
+}
+.rel-error-text {
+  fill: #EF4444;
+  font-size: 11px;
+  font-weight: 800;
+  text-anchor: middle;
+  pointer-events: none;
+}
+.rel-waypoint circle {
+  fill: rgba(13, 13, 15, 0.25);
+  stroke: #94a3b8;
+  stroke-width: 1.5;
+  cursor: grab;
+}
+.rel-waypoint circle:hover {
+  stroke: #e2e8f0;
+  fill: rgba(148, 163, 184, 0.18);
+}
 
 .empty-state {
   position: absolute; inset: 0;
