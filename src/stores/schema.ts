@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import type { Schema, Table, Column, Relation, TableGroup, SQLDialect } from '../types'
 import { TABLE_WIDTH } from '../types'
-import { normalizeSqlType } from '../types/sqlTypes'
+import { canonicalSqlType, normalizeSqlType } from '../types/sqlTypes'
 import { useTabsStore } from './tabs'
 import { saveExportFile } from '../composables/useFileExport'
 import {
@@ -54,6 +54,15 @@ export const useSchemaStore = defineStore('schema', () => {
     if (normalized === 'CHAR(36)') return 'UUID()'
     if (normalized === 'UNIQUEIDENTIFIER') return 'NEWID()'
     return ''
+  }
+
+  function isUuidSemanticColumn(column: Column): boolean {
+    if (canonicalSqlType(column.type) === 'UUID') return true
+    return Object.values(column.dialectTypes ?? {}).some(type => canonicalSqlType(type) === 'UUID')
+  }
+
+  function sqliteUuidCheck(columnName: string): string {
+    return `CHECK (${columnName} IS NULL OR (length(${columnName}) = 36 AND substr(${columnName}, 9, 1) = '-' AND substr(${columnName}, 14, 1) = '-' AND substr(${columnName}, 19, 1) = '-' AND substr(${columnName}, 24, 1) = '-' AND lower(${columnName}) GLOB '[0-9a-f-]*'))`
   }
 
   function updateSchemaMeta(updates: Partial<Pick<Schema, 'name' | 'dialect'>>) {
@@ -358,6 +367,7 @@ export const useSchemaStore = defineStore('schema', () => {
           if (!col.nullable && !col.primaryKey) def += ' NOT NULL'
           if (col.unique && !col.primaryKey) def += ' UNIQUE'
           if (col.defaultValue) def += ` DEFAULT ${col.defaultValue}`
+          if (dialect === 'sqlite' && isUuidSemanticColumn(col)) def += ` ${sqliteUuidCheck(col.name)}`
           colDefs.push(def)
         }
         for (const rel of s.relations) {
