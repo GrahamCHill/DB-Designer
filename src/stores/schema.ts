@@ -32,6 +32,30 @@ export const useSchemaStore = defineStore('schema', () => {
     if (s) tabsStore.updateSchema({ ...s, updatedAt: new Date().toISOString() })
   }
 
+  function withDialectMemory(column: Column, dialect: SQLDialect): Column {
+    const normalizedType = normalizeSqlType(column.type, dialect)
+    return {
+      ...column,
+      type: normalizedType,
+      dialectTypes: {
+        ...(column.dialectTypes ?? {}),
+        [dialect]: normalizedType,
+      },
+    }
+  }
+
+  function defaultUuidTypeForDialect(dialect: SQLDialect): string {
+    return normalizeSqlType('UUID', dialect)
+  }
+
+  function defaultUuidValueForDialect(dialect: SQLDialect, type: string): string {
+    const normalized = normalizeSqlType(type, dialect).toUpperCase()
+    if (normalized === 'UUID') return 'gen_random_uuid()'
+    if (normalized === 'CHAR(36)') return 'UUID()'
+    if (normalized === 'UNIQUEIDENTIFIER') return 'NEWID()'
+    return ''
+  }
+
   function updateSchemaMeta(updates: Partial<Pick<Schema, 'name' | 'dialect'>>) {
     Object.assign(sc(), updates)
     persist()
@@ -39,13 +63,22 @@ export const useSchemaStore = defineStore('schema', () => {
 
   function setSchemaDialect(dialect: SQLDialect) {
     const s = sc()
+    const previousDialect = s.dialect ?? 'postgresql'
     s.dialect = dialect
     s.tables = s.tables.map(table => ({
       ...table,
-      columns: table.columns.map(column => ({
-        ...column,
-        type: normalizeSqlType(column.type, dialect),
-      })),
+      columns: table.columns.map(column => {
+        const remembered = {
+          ...(column.dialectTypes ?? {}),
+          [previousDialect]: column.type,
+        }
+
+        return {
+          ...column,
+          dialectTypes: remembered,
+          type: normalizeSqlType(remembered[dialect] ?? column.type, dialect),
+        }
+      }),
     }))
     persist()
   }
@@ -71,6 +104,7 @@ export const useSchemaStore = defineStore('schema', () => {
 
   function createTable(position = { x: 100, y: 100 }, groupId: string | null = null) {
     const s = sc()
+    const idType = defaultUuidTypeForDialect(s.dialect ?? 'postgresql')
     const table: Table = {
       id: uuidv4(),
       name: `table_${s.tables.length + 1}`,
@@ -80,8 +114,18 @@ export const useSchemaStore = defineStore('schema', () => {
       groupLocked: false,
       immutable: false,
       width: TABLE_WIDTH,
-      columns: [{ id: uuidv4(), name: 'id', type: 'UUID', nullable: false,
-        primaryKey: true, unique: true, immutable: false, defaultValue: 'gen_random_uuid()', comment: '' }],
+      columns: [{
+        id: uuidv4(),
+        name: 'id',
+        type: idType,
+        dialectTypes: { [s.dialect ?? 'postgresql']: idType },
+        nullable: false,
+        primaryKey: true,
+        unique: true,
+        immutable: false,
+        defaultValue: defaultUuidValueForDialect(s.dialect ?? 'postgresql', idType),
+        comment: '',
+      }],
     }
     s.tables.push(table)
     selectedTableId.value = table.id
@@ -92,7 +136,11 @@ export const useSchemaStore = defineStore('schema', () => {
 
   function updateTable(tableId: string, updates: Partial<Table>) {
     const t = sc().tables.find(t => t.id === tableId)
-    if (t) { Object.assign(t, updates); persist() }
+    if (t) {
+      Object.assign(t, updates)
+      t.columns = t.columns.map(column => withDialectMemory(column, sc().dialect ?? 'postgresql'))
+      persist()
+    }
   }
 
   function deleteTable(tableId: string) {
@@ -109,6 +157,7 @@ export const useSchemaStore = defineStore('schema', () => {
     if (!table) return
     const col: Column = {
       id: uuidv4(), name: `column_${table.columns.length + 1}`, type: 'VARCHAR',
+      dialectTypes: { [sc().dialect ?? 'postgresql']: 'VARCHAR' },
       nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: '',
     }
     table.columns.push(col)
@@ -118,7 +167,14 @@ export const useSchemaStore = defineStore('schema', () => {
 
   function updateColumn(tableId: string, columnId: string, updates: Partial<Column>) {
     const col = sc().tables.find(t => t.id === tableId)?.columns.find(c => c.id === columnId)
-    if (col) { Object.assign(col, updates); persist() }
+    if (col) {
+      Object.assign(col, updates)
+      col.dialectTypes = {
+        ...(col.dialectTypes ?? {}),
+        [sc().dialect ?? 'postgresql']: col.type,
+      }
+      persist()
+    }
   }
 
   function deleteColumn(tableId: string, columnId: string) {
@@ -344,7 +400,14 @@ export const useSchemaStore = defineStore('schema', () => {
       groupLocked: t.groupLocked ?? false,
       immutable: t.immutable ?? false,
       width: t.width ?? TABLE_WIDTH,
-      columns: (t.columns ?? []).map(c => ({ ...c, immutable: c.immutable ?? false })),
+      columns: (t.columns ?? []).map(c => ({
+        ...c,
+        immutable: c.immutable ?? false,
+        dialectTypes: {
+          ...(c.dialectTypes ?? {}),
+          [json.dialect ?? 'postgresql']: c.type,
+        },
+      })),
     }))
     tabsStore.loadSchemaIntoNewTab(json)
     clearSelection()

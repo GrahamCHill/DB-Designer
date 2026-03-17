@@ -6,12 +6,13 @@
           <div class="modal-title-row">
             <span class="modal-icon" :style="{ color: localTable.color }">&#11041;</span>
             <input
-              class="table-name-input"
               v-model="localTable.name"
+              class="table-name-input"
               placeholder="table_name"
               @keydown.enter="save"
             />
           </div>
+
           <div class="color-picker">
             <button
               v-for="color in TABLE_COLORS"
@@ -27,7 +28,7 @@
         <div class="modal-body">
           <div class="table-settings-row">
             <label class="table-setting">
-              <input type="checkbox" v-model="localTable.immutable" />
+              <input v-model="localTable.immutable" type="checkbox" />
               <span>Immutable table</span>
             </label>
           </div>
@@ -54,17 +55,18 @@
 
           <draggable-list :columns="localTable.columns" @update="localTable.columns = $event">
             <template #default="{ col, index }">
-              <div class="column-editor-row" :key="col.id">
+              <div :key="col.id" class="column-editor-row">
                 <span class="drag-handle">::</span>
 
                 <input
+                  v-model="col.name"
                   class="col-input"
                   style="flex:1.5"
-                  v-model="col.name"
                   placeholder="column_name"
                 />
 
                 <button
+                  :ref="el => setTypeTriggerRef(col.id, el)"
                   type="button"
                   class="col-input col-type-select type-picker-trigger"
                   style="flex:1"
@@ -98,33 +100,33 @@
                 >?</button>
 
                 <input
+                  v-model="col.primaryKey"
                   type="checkbox"
                   class="col-check"
-                  v-model="col.primaryKey"
                   @change="if (col.primaryKey) { col.nullable = false; col.unique = true }"
                 />
                 <input
-                  type="checkbox"
-                  class="col-check"
                   v-model="col.nullable"
+                  type="checkbox"
+                  class="col-check"
                   :disabled="col.primaryKey"
                 />
                 <input
-                  type="checkbox"
-                  class="col-check"
                   v-model="col.unique"
+                  type="checkbox"
+                  class="col-check"
                   :disabled="col.primaryKey"
                 />
                 <input
+                  v-model="col.immutable"
                   type="checkbox"
                   class="col-check"
-                  v-model="col.immutable"
                 />
 
                 <input
+                  v-model="col.defaultValue"
                   class="col-input"
                   style="flex:1"
-                  v-model="col.defaultValue"
                   placeholder="default..."
                 />
 
@@ -142,7 +144,7 @@
                   >{{ preset.label }}</option>
                 </select>
 
-                <button class="del-col-btn" @click="removeColumn(index)" title="Delete column">X</button>
+                <button class="del-col-btn" title="Delete column" @click="removeColumn(index)">X</button>
               </div>
             </template>
           </draggable-list>
@@ -162,17 +164,40 @@
       </div>
     </div>
 
-    <div v-if="activeTypePickerColumn" class="type-browser-backdrop" @click.self="closeTypePicker">
-      <div class="type-browser">
-        <div class="type-browser-header">
+    <div
+      v-if="activeTypePickerColumn"
+      class="type-picker-overlay"
+      @mousedown.self="closeTypePicker"
+    >
+      <div class="type-picker-menu" :style="typePickerStyle" @mousedown.stop>
+        <div class="type-picker-menu-header">
           <div>
-            <div class="type-browser-title">Pick SQL Type</div>
-            <div class="type-browser-subtitle">
+            <div class="type-picker-title">SQL Type</div>
+            <div class="type-picker-subtitle">
               {{ activeTypePickerColumn.name || 'Column' }} · {{ activeDialectLabel }}
             </div>
           </div>
-          <button class="type-browser-close" type="button" @click="closeTypePicker">Close</button>
+          <button type="button" class="type-picker-close" @click="closeTypePicker">Close</button>
         </div>
+
+        <input
+          ref="typeSearchInput"
+          v-model="typeSearch"
+          class="type-search-input"
+          type="text"
+          placeholder="Search or enter custom type"
+          @keydown.enter.prevent="applySearchType"
+        />
+
+        <button
+          v-if="showCustomTypeOption"
+          type="button"
+          class="type-option custom"
+          @click="applySearchType"
+        >
+          <span class="type-option-label">{{ normalizedSearchType }}</span>
+          <span class="type-option-meta">Use custom type text</span>
+        </button>
 
         <button
           v-if="!isTypeVisible(getDisplayType(activeTypePickerColumn.type))"
@@ -182,14 +207,10 @@
           @click="selectType(activeTypePickerColumn, getDisplayType(activeTypePickerColumn.type))"
         >
           <span class="type-option-label">{{ getDisplayType(activeTypePickerColumn.type) }}</span>
-          <span class="type-option-meta">Current</span>
+          <span class="type-option-meta">Current value</span>
         </button>
 
-        <div
-          v-for="group in filteredTypeGroups"
-          :key="group.label"
-          class="type-group"
-        >
+        <div v-for="group in filteredTypeGroups" :key="group.label" class="type-group">
           <button
             type="button"
             class="type-group-toggle"
@@ -220,18 +241,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import { useSchemaStore } from '../../stores/schema'
-import type { Table, Column, SQLDialect } from '../../types'
-import { SQL_TYPE_OPTIONS, getSqlTypeDescription, getSqlTypeGroups } from '../../types/sqlTypes'
+import type { Column, SQLDialect, Table } from '../../types'
+import { SQL_TYPE_OPTIONS, getSqlTypeDescription, getSqlTypeGroups, normalizeSqlType } from '../../types/sqlTypes'
 
 const DraggableList = {
   props: ['columns'],
   emits: ['update'],
   setup(props: any, { slots }: any) {
     return () => props.columns.map((col: Column, index: number) => slots.default({ col, index }))
-  }
+  },
 }
 
 const TABLE_COLORS = [
@@ -240,11 +261,11 @@ const TABLE_COLORS = [
   '#F97316', '#84CC16',
 ]
 
-const TYPE_DIALECTS: { value: SQLDialect; label: string; description: string }[] = [
-  { value: 'postgresql', label: 'Postgres', description: 'Show PostgreSQL-specific types, including arrays and JSONB.' },
-  { value: 'mysql', label: 'MySQL', description: 'Show MySQL-specific integer, text, and enum types.' },
-  { value: 'sqlite', label: 'SQLite', description: 'Show SQLite-friendly storage types.' },
-  { value: 'sqlserver', label: 'SQL Server', description: 'Show SQL Server-specific Unicode and binary types.' },
+const TYPE_DIALECTS: { value: SQLDialect; label: string }[] = [
+  { value: 'postgresql', label: 'Postgres' },
+  { value: 'mysql', label: 'MySQL' },
+  { value: 'sqlite', label: 'SQLite' },
+  { value: 'sqlserver', label: 'SQL Server' },
 ]
 
 type DefaultPreset = { label: string; value: string }
@@ -255,17 +276,23 @@ const store = useSchemaStore()
 
 const localTable = reactive<Table>(JSON.parse(JSON.stringify(props.table)))
 localTable.immutable ??= false
-localTable.columns.forEach(column => { column.immutable ??= false })
+localTable.columns.forEach(column => {
+  column.immutable ??= false
+  column.dialectTypes = {
+    ...(column.dialectTypes ?? {}),
+    [(store.schema.dialect ?? 'postgresql') as SQLDialect]: column.type,
+  }
+})
 
 const openTypePickerFor = ref<string | null>(null)
+const typeSearch = ref('')
 const collapsedTypeGroups = ref<Record<string, boolean>>({})
 const defaultPresetByColumn = ref<Record<string, string>>({})
+const typePickerStyle = ref<Record<string, string>>({})
+const typeTriggerRefs = new Map<string, HTMLElement>()
+const typeSearchInput = ref<HTMLInputElement | null>(null)
 
 const schemaDialect = computed(() => store.schema.dialect ?? 'postgresql')
-const filteredTypeGroups = computed(() => getSqlTypeGroups(schemaDialect.value))
-const visibleTypeValues = computed(() => new Set(
-  filteredTypeGroups.value.flatMap(group => group.types.map(type => type.value))
-))
 const activeTypePickerColumn = computed(() =>
   localTable.columns.find(column => column.id === openTypePickerFor.value) ?? null
 )
@@ -279,6 +306,29 @@ const arrayElementOptions = computed(() =>
     type.dialects.includes('postgresql')
   )
 )
+const visibleTypeValues = computed(() => new Set(
+  getSqlTypeGroups(schemaDialect.value).flatMap(group => group.types.map(type => type.value))
+))
+const normalizedSearchType = computed(() => typeSearch.value.trim().toUpperCase())
+const filteredTypeGroups = computed(() => {
+  const query = normalizedSearchType.value
+  return getSqlTypeGroups(schemaDialect.value)
+    .map(group => ({
+      label: group.label,
+      types: query
+        ? group.types.filter(type =>
+          type.value.includes(query) ||
+          type.label.includes(query) ||
+          type.description.toUpperCase().includes(query)
+        )
+        : group.types,
+    }))
+    .filter(group => group.types.length > 0)
+})
+const showCustomTypeOption = computed(() =>
+  !!normalizedSearchType.value &&
+  !visibleTypeValues.value.has(normalizedSearchType.value)
+)
 
 function closeAll() {
   closeTypePicker()
@@ -287,11 +337,67 @@ function closeAll() {
 
 function closeTypePicker() {
   openTypePickerFor.value = null
+  typeSearch.value = ''
+}
+
+function setTypeTriggerRef(columnId: string, element: Element | { $el?: Element } | null) {
+  const resolved = element instanceof HTMLElement
+    ? element
+    : element && '$el' in element && element.$el instanceof HTMLElement
+      ? element.$el
+      : null
+
+  if (resolved) typeTriggerRefs.set(columnId, resolved)
+  else typeTriggerRefs.delete(columnId)
+}
+
+function positionTypePicker() {
+  const columnId = openTypePickerFor.value
+  if (!columnId) return
+
+  const trigger = typeTriggerRefs.get(columnId)
+  if (!trigger) return
+
+  const rect = trigger.getBoundingClientRect()
+  const width = Math.max(420, rect.width + 220)
+  const left = Math.min(window.innerWidth - width - 16, Math.max(16, rect.left))
+  const top = Math.min(window.innerHeight - 420, rect.bottom + 8)
+
+  typePickerStyle.value = {
+    position: 'fixed',
+    top: `${Math.max(16, top)}px`,
+    left: `${left}px`,
+    width: `${width}px`,
+    maxHeight: '420px',
+  }
 }
 
 function openTypePicker(columnId: string) {
   openTypePickerFor.value = columnId
+  const column = localTable.columns.find(item => item.id === columnId)
+  typeSearch.value = getDisplayType(column?.type ?? '')
+  nextTick(() => {
+    positionTypePicker()
+    typeSearchInput.value?.select()
+  })
 }
+
+function handleViewportChange() {
+  if (activeTypePickerColumn.value) positionTypePicker()
+}
+
+watch(openTypePickerFor, value => {
+  if (!value) return
+  nextTick(positionTypePicker)
+})
+
+window.addEventListener('resize', handleViewportChange)
+window.addEventListener('scroll', handleViewportChange, true)
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleViewportChange)
+  window.removeEventListener('scroll', handleViewportChange, true)
+})
 
 function getTypeDescription(type: string) {
   return getSqlTypeDescription(type)
@@ -325,8 +431,17 @@ function getArrayElementType(type: string) {
   return 'TEXT'
 }
 
+function rememberColumnType(col: Column) {
+  col.dialectTypes = {
+    ...(col.dialectTypes ?? {}),
+    [schemaDialect.value]: col.type,
+  }
+}
+
 function onTypeChange(col: Column, value: string) {
-  col.type = value === 'ARRAY' ? `${getArrayElementType(col.type)}[]` : value
+  const nextType = value === 'ARRAY' ? `${getArrayElementType(col.type)}[]` : value
+  col.type = normalizeSqlType(nextType, schemaDialect.value)
+  rememberColumnType(col)
 }
 
 function selectType(col: Column, value: string) {
@@ -334,15 +449,21 @@ function selectType(col: Column, value: string) {
   closeTypePicker()
 }
 
+function applySearchType() {
+  if (!activeTypePickerColumn.value || !normalizedSearchType.value) return
+  selectType(activeTypePickerColumn.value, normalizedSearchType.value)
+}
+
 function onArrayElementTypeChange(col: Column, value: string) {
-  col.type = `${value}[]`
+  col.type = normalizeSqlType(`${value}[]`, schemaDialect.value)
+  rememberColumnType(col)
 }
 
 function defaultPresetsForColumn(col: Column): DefaultPreset[] {
   const type = col.type.toUpperCase()
   const dialect = schemaDialect.value
 
-  if (type === 'UUID' || type === 'UNIQUEIDENTIFIER') {
+  if (type === 'UUID' || type === 'UNIQUEIDENTIFIER' || type === 'CHAR(36)' || type === 'VARCHAR(36)') {
     if (dialect === 'postgresql') return [{ label: 'Random UUID', value: 'gen_random_uuid()' }]
     if (dialect === 'mysql') return [{ label: 'Random UUID', value: 'UUID()' }]
     if (dialect === 'sqlserver') return [{ label: 'Random UUID', value: 'NEWID()' }]
@@ -412,6 +533,7 @@ function addColumn() {
     id: uuidv4(),
     name: `column_${localTable.columns.length + 1}`,
     type: 'VARCHAR',
+    dialectTypes: { [schemaDialect.value]: 'VARCHAR' },
     nullable: true,
     primaryKey: false,
     unique: false,
@@ -426,6 +548,15 @@ function removeColumn(index: number) {
 }
 
 function save() {
+  const dialect = schemaDialect.value
+  localTable.columns = localTable.columns.map(column => ({
+    ...column,
+    dialectTypes: {
+      ...(column.dialectTypes ?? {}),
+      [dialect]: column.type,
+    },
+  }))
+
   store.updateTable(localTable.id, {
     name: localTable.name,
     color: localTable.color,
@@ -527,12 +658,12 @@ function deleteTable() {
 }
 
 .modal-body::-webkit-scrollbar,
-.type-browser::-webkit-scrollbar {
+.type-picker-menu::-webkit-scrollbar {
   width: 4px;
 }
 
 .modal-body::-webkit-scrollbar-thumb,
-.type-browser::-webkit-scrollbar-thumb {
+.type-picker-menu::-webkit-scrollbar-thumb {
   background: #2a2a35;
   border-radius: 2px;
 }
@@ -554,7 +685,7 @@ function deleteTable() {
 
 .table-setting input,
 .col-check {
-  accent-color: #3ECF8E;
+  accent-color: #3ecf8e;
 }
 
 .type-filter-row {
@@ -573,6 +704,7 @@ function deleteTable() {
   text-transform: uppercase;
   color: #555;
 }
+
 .type-filter-value {
   color: #9ca3af;
   font-size: 11px;
@@ -629,7 +761,7 @@ function deleteTable() {
 }
 
 .col-input:focus {
-  border-color: #3ECF8E40;
+  border-color: #3ecf8e40;
 }
 
 .col-type-select,
@@ -676,8 +808,8 @@ function deleteTable() {
 }
 
 .type-help-btn:hover {
-  color: #3ECF8E;
-  border-color: #3ECF8E40;
+  color: #3ecf8e;
+  border-color: #3ecf8e40;
 }
 
 .col-check {
@@ -704,8 +836,8 @@ function deleteTable() {
 }
 
 .del-col-btn:hover {
-  color: #EF4444;
-  background: #EF444415;
+  color: #ef4444;
+  background: #ef444415;
 }
 
 .add-col-btn {
@@ -721,8 +853,8 @@ function deleteTable() {
 }
 
 .add-col-btn:hover {
-  color: #3ECF8E;
-  border-color: #3ECF8E50;
+  color: #3ecf8e;
+  border-color: #3ecf8e50;
 }
 
 .modal-footer {
@@ -750,7 +882,7 @@ function deleteTable() {
 }
 
 .btn-save {
-  background: #3ECF8E;
+  background: #3ecf8e;
   color: #0a1a12;
   border: none;
   border-radius: 7px;
@@ -761,28 +893,21 @@ function deleteTable() {
 }
 
 .btn-danger {
-  border-color: #EF444440;
-  color: #EF4444;
+  border-color: #ef444440;
+  color: #ef4444;
 }
 
 .btn-danger:hover {
-  background: #EF444415;
+  background: #ef444415;
 }
 
-.type-browser-backdrop {
+.type-picker-overlay {
   position: fixed;
   inset: 0;
   z-index: 1400;
-  background: rgba(0, 0, 0, 0.22);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 56px 24px 24px;
 }
 
-.type-browser {
-  width: min(560px, 100%);
-  max-height: min(72vh, 620px);
+.type-picker-menu {
   overflow-y: auto;
   padding: 12px;
   border: 1px solid #2a2a35;
@@ -791,27 +916,27 @@ function deleteTable() {
   box-shadow: 0 24px 56px #0000007a;
 }
 
-.type-browser-header {
+.type-picker-menu-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 10px;
 }
 
-.type-browser-title {
+.type-picker-title {
   color: #f0f0f0;
   font-size: 14px;
   font-weight: 700;
 }
 
-.type-browser-subtitle {
+.type-picker-subtitle {
   color: #777;
   font-size: 11px;
   margin-top: 4px;
 }
 
-.type-browser-close {
+.type-picker-close {
   border: 1px solid #2a2a35;
   background: #17171d;
   color: #9ca3af;
@@ -819,6 +944,23 @@ function deleteTable() {
   padding: 6px 10px;
   font-size: 11px;
   cursor: pointer;
+}
+
+.type-search-input {
+  width: 100%;
+  margin-bottom: 10px;
+  background: #17171d;
+  border: 1px solid #2a2a35;
+  border-radius: 8px;
+  color: #d0d0d8;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  outline: none;
+}
+
+.type-search-input:focus {
+  border-color: #3ecf8e40;
 }
 
 .type-group + .type-group {
@@ -867,11 +1009,12 @@ function deleteTable() {
 
 .type-option:hover,
 .type-option.active {
-  border-color: #3ECF8E40;
+  border-color: #3ecf8e40;
   background: #1c1f26;
 }
 
-.type-option.current {
+.type-option.current,
+.type-option.custom {
   margin-bottom: 8px;
   border-color: #3a3a50;
 }

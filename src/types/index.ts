@@ -4,6 +4,7 @@ export interface Column {
   id: string
   name: string
   type: ColumnType
+  dialectTypes?: Partial<Record<SQLDialect, ColumnType>>
   nullable: boolean
   primaryKey: boolean
   unique: boolean

@@ -68,7 +68,14 @@ function loadSchema(schemaId: string): Schema | null {
           ...t,
           groupId: t.groupId ?? null,
           immutable: t.immutable ?? false,
-          columns: (t.columns ?? []).map(c => ({ ...c, immutable: c.immutable ?? false })),
+          columns: (t.columns ?? []).map(c => ({
+            ...c,
+            immutable: c.immutable ?? false,
+            dialectTypes: {
+              ...(c.dialectTypes ?? {}),
+              [s.dialect ?? 'postgresql']: c.type,
+            },
+          })),
         });
       })
       return s
