@@ -18,6 +18,7 @@ function blankSchema(name = 'Untitled'): Schema {
   return {
     id: uuidv4(),
     name,
+    dialect: 'postgresql',
     tables: [],
     relations: [],
     groups: [],
@@ -57,16 +58,17 @@ function loadSchema(schemaId: string): Schema | null {
     const raw = localStorage.getItem(SCHEMA_STORAGE_PREFIX + schemaId)
     if (raw) {
       const s = JSON.parse(raw) as Schema
+      if (!s.dialect) s.dialect = 'postgresql'
       if (!s.groups) s.groups = []
       if (!s.relations) s.relations = []
       s.relations = s.relations.map(r => ({ waypoints: [], ...r }))
       s.tables = s.tables.map(t => {
         // @ts-ignore
         return ({
-          groupId: null,
-          immutable: false,
           ...t,
-          columns: (t.columns ?? []).map(c => ({ immutable: false, ...c })),
+          groupId: t.groupId ?? null,
+          immutable: t.immutable ?? false,
+          columns: (t.columns ?? []).map(c => ({ ...c, immutable: c.immutable ?? false })),
         });
       })
       return s

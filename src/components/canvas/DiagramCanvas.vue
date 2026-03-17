@@ -48,7 +48,7 @@
             fill="none" stroke="transparent" stroke-width="14"
             class="relation-hit"
             @click.stop="selectRelation(rel.id)"
-            @dblclick.stop="addRelationWaypoint(rel.id)"
+            @dblclick.stop="addRelationWaypoint(rel.id, $event)"
           >
             <title>{{ relationValidationById.get(rel.id)?.messages.join(' | ') || 'Valid relation' }}</title>
           </path>
@@ -59,7 +59,11 @@
             <text :x="relLabelPos(rel)!.tgt.x" :y="relLabelPos(rel)!.tgt.y" class="rel-label"
               :fill="store.selectedRelationId === rel.id ? '#3ECF8E' : '#3ECF8E99'">{{ tgtLabel(rel.type) }}</text>
           </g>
-          <g v-if="relationValidationById.get(rel.id)?.hasError" class="rel-error">
+          <g
+            v-if="relationValidationById.get(rel.id)?.hasError"
+            class="rel-error"
+            @click.stop="selectRelation(rel.id)"
+          >
             <circle :cx="relationPathMidpoint(rel).x" :cy="relationPathMidpoint(rel).y" r="10" />
             <text :x="relationPathMidpoint(rel).x" :y="relationPathMidpoint(rel).y + 4" class="rel-error-text">X</text>
             <title>{{ relationValidationById.get(rel.id)?.messages.join(' | ') }}</title>
@@ -406,6 +410,35 @@ function relationPathMidpoint(rel: Relation) {
   return samples.find(sample => sample.distance >= half) ?? samples[samples.length - 1]
 }
 
+function relationInsertionPoint(rel: Relation, target: { x: number; y: number }) {
+  const points = relationRoutePoints(rel)
+  let best = {
+    point: relationPathMidpoint(rel),
+    insertAt: Math.max(0, points.length - 2),
+    distance: Number.POSITIVE_INFINITY,
+  }
+
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i]
+    const b = points[i + 1]
+    const { c1, c2 } = bezierControls(a, b)
+
+    for (let step = 0; step <= 32; step++) {
+      const point = cubicPoint(a, c1, c2, b, step / 32)
+      const distance = Math.hypot(point.x - target.x, point.y - target.y)
+      if (distance < best.distance) {
+        best = {
+          point,
+          insertAt: i,
+          distance,
+        }
+      }
+    }
+  }
+
+  return best
+}
+
 function srcLabel(type: RelationType) { return type === 'many-to-many' ? 'N' : '1' }
 function tgtLabel(type: RelationType) {
   if (type === 'one-to-one') return '1'
@@ -430,8 +463,32 @@ const relationValidationById = computed(() => {
     hasError: boolean
     typeMismatch: boolean
     invalidTarget: boolean
+    circular: boolean
     messages: string[]
   }>()
+
+  const dependencyGraph = new Map<string, Set<string>>()
+  for (const relation of store.schema.relations) {
+    if (!dependencyGraph.has(relation.targetTableId)) dependencyGraph.set(relation.targetTableId, new Set())
+    dependencyGraph.get(relation.targetTableId)!.add(relation.sourceTableId)
+  }
+
+  const createsCircularDependency = (relation: Relation) => {
+    if (relation.sourceTableId === relation.targetTableId) return false
+
+    const seen = new Set<string>()
+    const queue = [...(dependencyGraph.get(relation.sourceTableId) ?? [])]
+
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      if (current === relation.targetTableId) return true
+      if (seen.has(current)) continue
+      seen.add(current)
+      queue.push(...(dependencyGraph.get(current) ?? []))
+    }
+
+    return false
+  }
 
   for (const rel of store.schema.relations) {
     const sourceTable = store.schema.tables.find(t => t.id === rel.sourceTableId)
@@ -453,6 +510,11 @@ const relationValidationById = computed(() => {
       messages.push('Referenced column should be PRIMARY KEY or UNIQUE.')
     }
 
+    const circular = createsCircularDependency(rel)
+    if (circular) {
+      messages.push('Circular foreign key dependency detected across related tables.')
+    }
+
     if (rel.type === 'one-to-one' && targetCol && !targetCol.primaryKey && !targetCol.unique) {
       messages.push('One-to-one relations require the foreign key column to be UNIQUE or PRIMARY KEY.')
     }
@@ -465,6 +527,7 @@ const relationValidationById = computed(() => {
       hasError: messages.length > 0,
       typeMismatch,
       invalidTarget,
+      circular,
       messages,
     })
   }
@@ -509,9 +572,13 @@ const invalidColsByTable = computed(() => {
   const map = new Map<string, Set<string>>()
   for (const rel of store.schema.relations) {
     const validation = relationValidationById.value.get(rel.id)
-    if (!validation?.invalidTarget) continue
+    if (!validation || (!validation.invalidTarget && !validation.circular)) continue
     if (!map.has(rel.sourceTableId)) map.set(rel.sourceTableId, new Set())
     map.get(rel.sourceTableId)!.add(rel.sourceColumnId)
+    if (validation.circular) {
+      if (!map.has(rel.targetTableId)) map.set(rel.targetTableId, new Set())
+      map.get(rel.targetTableId)!.add(rel.targetColumnId)
+    }
   }
   return map
 })
@@ -536,6 +603,11 @@ const columnIssuesByTable = computed(() => {
 
     if (validation.invalidTarget) {
       pushIssue(rel.sourceTableId, rel.sourceColumnId, 'This referenced column is not PRIMARY KEY or UNIQUE.')
+    }
+
+    if (validation.circular) {
+      pushIssue(rel.sourceTableId, rel.sourceColumnId, 'This relation participates in a circular foreign key dependency.')
+      pushIssue(rel.targetTableId, rel.targetColumnId, 'This relation participates in a circular foreign key dependency.')
     }
 
     for (const message of validation.messages) {
@@ -808,10 +880,15 @@ function startRelationWaypointDrag(relationId: string, waypointIndex: number, e:
   }
 }
 
-function addRelationWaypoint(relationId: string) {
+function addRelationWaypoint(relationId: string, event?: MouseEvent) {
   const rel = store.schema.relations.find(current => current.id === relationId)
   if (!rel) return
-  const next = [...(relationWaypointById[relationId] ?? rel.waypoints ?? []), relationPathMidpoint(rel)]
+  const current = [...(relationWaypointById[relationId] ?? rel.waypoints ?? [])]
+  const insertion = event
+    ? relationInsertionPoint(rel, toCanvas(event.clientX, event.clientY))
+    : { point: relationPathMidpoint(rel), insertAt: current.length }
+  const next = [...current]
+  next.splice(insertion.insertAt, 0, insertion.point)
   relationWaypointById[relationId] = next
   store.updateRelation(relationId, { waypoints: next })
 }

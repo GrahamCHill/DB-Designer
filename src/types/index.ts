@@ -51,6 +51,7 @@ export interface TableGroup {
 export interface Schema {
   id: string
   name: string
+  dialect: SQLDialect
   tables: Table[]
   relations: Relation[]
   groups: TableGroup[]

@@ -26,7 +26,15 @@
     <!-- Project actions -->
     <div class="sidebar-section">
       <div class="project-row">
-        <input class="project-name-input" v-model="store.schema.name" placeholder="Schema name" />
+        <input class="project-name-input" v-model="schemaName" placeholder="Schema name" />
+      </div>
+      <div class="project-row">
+        <label class="project-field-label">Database</label>
+        <select class="project-select" v-model="schemaDialect">
+          <option v-for="dialect in DIALECT_OPTIONS" :key="dialect.value" :value="dialect.value">
+            {{ dialect.label }}
+          </option>
+        </select>
       </div>
       <div class="btn-row three">
         <button class="btn-ghost-sm" @click="newProject">⊕ New</button>
@@ -262,12 +270,26 @@
 import { ref, computed, watch } from 'vue'
 import { useSchemaStore } from '../../stores/schema'
 import ExportModal from '../modals/ExportModal.vue'
-import type { Schema } from '../../types'
+import type { Schema, SQLDialect } from '../../types'
 
 const store = useSchemaStore()
 const showExport = ref(false)
 const appVersion = (import.meta.env.VITE_APP_VERSION || '').trim()
 const appVersionLabel = appVersion ? `v${appVersion}` : 'dev'
+const DIALECT_OPTIONS: { label: string; value: SQLDialect }[] = [
+  { label: 'PostgreSQL', value: 'postgresql' },
+  { label: 'MySQL', value: 'mysql' },
+  { label: 'SQLite', value: 'sqlite' },
+  { label: 'SQL Server', value: 'sqlserver' },
+]
+const schemaName = computed({
+  get: () => store.schema.name,
+  set: (value: string) => store.updateSchemaMeta({ name: value }),
+})
+const schemaDialect = computed({
+  get: () => store.schema.dialect,
+  set: (value: SQLDialect) => store.setSchemaDialect(value),
+})
 
 // ── Drag state ────────────────────────────────────────────────────────────────
 
@@ -502,6 +524,15 @@ function loadFile(e: Event) {
 
 /* Project row */
 .project-row { margin-bottom: 6px; }
+.project-field-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #555;
+}
 .project-name-input {
   width: 100%; background: #18181f; border: 1px solid #25252f;
   border-radius: 6px; color: #e0e0e0; padding: 7px 10px;
@@ -509,6 +540,18 @@ function loadFile(e: Event) {
   outline: none; transition: border-color 0.15s; box-sizing: border-box;
 }
 .project-name-input:focus { border-color: #3ECF8E40; }
+.project-select {
+  width: 100%;
+  background: #18181f;
+  border: 1px solid #25252f;
+  border-radius: 6px;
+  color: #e0e0e0;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  outline: none;
+}
+.project-select:focus { border-color: #3ECF8E40; }
 
 .btn-row { display: flex; gap: 5px; }
 .btn-row.three > * { flex: 1; }

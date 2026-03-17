@@ -1,11 +1,10 @@
 <template>
   <Teleport to="body">
-    <div class="modal-overlay" @click.self="$emit('close')">
+    <div class="modal-overlay" @click.self="closeAll">
       <div class="modal" @click.stop>
-        <!-- Modal Header -->
         <div class="modal-header">
           <div class="modal-title-row">
-            <span class="modal-icon" :style="{ color: localTable.color }">⬡</span>
+            <span class="modal-icon" :style="{ color: localTable.color }">&#11041;</span>
             <input
               class="table-name-input"
               v-model="localTable.name"
@@ -25,21 +24,17 @@
           </div>
         </div>
 
-        <!-- Column editor -->
         <div class="modal-body">
+          <div class="table-settings-row">
+            <label class="table-setting">
+              <input type="checkbox" v-model="localTable.immutable" />
+              <span>Immutable table</span>
+            </label>
+          </div>
+
           <div class="type-filter-row">
             <span class="type-filter-label">Database</span>
-            <div class="type-filter-tabs">
-              <button
-                v-for="dialect in TYPE_DIALECTS"
-                :key="dialect.value"
-                type="button"
-                class="type-filter-tab"
-                :class="{ active: selectedTypeDialect === dialect.value }"
-                :title="dialect.description"
-                @click="selectedTypeDialect = dialect.value"
-              >{{ dialect.label }}</button>
-            </div>
+            <span class="type-filter-value">{{ activeDialectLabel }}</span>
           </div>
 
           <div class="columns-header">
@@ -51,14 +46,16 @@
             <span class="col-head center" style="width:36px" title="Primary Key">PK</span>
             <span class="col-head center" style="width:36px" title="Nullable">NULL</span>
             <span class="col-head center" style="width:36px" title="Unique">UQ</span>
+            <span class="col-head center" style="width:42px" title="Immutable">IMM</span>
             <span class="col-head" style="flex:1">Default</span>
+            <span class="col-head center" style="width:88px" title="Suggested defaults">Preset</span>
             <span class="col-head" style="width:32px"></span>
           </div>
 
           <draggable-list :columns="localTable.columns" @update="localTable.columns = $event">
             <template #default="{ col, index }">
               <div class="column-editor-row" :key="col.id">
-                <span class="drag-handle">⠿</span>
+                <span class="drag-handle">::</span>
 
                 <input
                   class="col-input"
@@ -67,24 +64,16 @@
                   placeholder="column_name"
                 />
 
-                <div class="type-picker" style="flex:1">
-                  <button
-                    class="col-input col-type-select type-picker-trigger"
-                    type="button"
-                    :ref="el => setTypePickerTrigger(col.id, el)"
-                    :title="getTypeDescription(col.type)"
-                    @click="toggleTypePicker(col.id)"
-                  >
-                    <span class="type-picker-value">{{ getDisplayType(col.type) }}</span>
-                    <span class="type-picker-caret">{{ openTypePickerFor === col.id ? '▲' : '▼' }}</span>
-                  </button>
-                </div>
-
                 <button
-                  class="type-help-btn"
                   type="button"
+                  class="col-input col-type-select type-picker-trigger"
+                  style="flex:1"
                   :title="getTypeDescription(col.type)"
-                >?</button>
+                  @click="openTypePicker(col.id)"
+                >
+                  <span class="type-picker-value">{{ getDisplayType(col.type) }}</span>
+                  <span class="type-picker-caret">v</span>
+                </button>
 
                 <select
                   v-if="showArrayTypeSelector(col.type)"
@@ -102,12 +91,17 @@
                 </select>
                 <span v-else class="array-type-placeholder"></span>
 
+                <button
+                  class="type-help-btn"
+                  type="button"
+                  :title="getTypeDescription(col.type)"
+                >?</button>
+
                 <input
                   type="checkbox"
                   class="col-check"
                   v-model="col.primaryKey"
-                  @change="if(col.primaryKey)
-                  { col.nullable = false; col.unique = true }"
+                  @change="if (col.primaryKey) { col.nullable = false; col.unique = true }"
                 />
                 <input
                   type="checkbox"
@@ -121,15 +115,34 @@
                   v-model="col.unique"
                   :disabled="col.primaryKey"
                 />
+                <input
+                  type="checkbox"
+                  class="col-check"
+                  v-model="col.immutable"
+                />
 
                 <input
                   class="col-input"
                   style="flex:1"
                   v-model="col.defaultValue"
-                  placeholder="default…"
+                  placeholder="default..."
                 />
 
-                <button class="del-col-btn" @click="removeColumn(index)" title="Delete column">✕</button>
+                <select
+                  class="col-input default-preset-select"
+                  :value="defaultPresetByColumn[col.id] ?? ''"
+                  :disabled="defaultPresetsForColumn(col).length === 0"
+                  @change="onDefaultPresetSelected(col, ($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="">Preset</option>
+                  <option
+                    v-for="preset in defaultPresetsForColumn(col)"
+                    :key="preset.value"
+                    :value="preset.value"
+                  >{{ preset.label }}</option>
+                </select>
+
+                <button class="del-col-btn" @click="removeColumn(index)" title="Delete column">X</button>
               </div>
             </template>
           </draggable-list>
@@ -137,24 +150,30 @@
           <button class="add-col-btn" @click="addColumn">+ Add Column</button>
         </div>
 
-        <!-- Modal Footer -->
         <div class="modal-footer">
           <div class="footer-left">
             <button class="btn-danger" @click="deleteTable">Delete Table</button>
           </div>
           <div class="footer-right">
-            <button class="btn-cancel" @click="$emit('close')">Cancel</button>
+            <button class="btn-cancel" @click="closeAll">Cancel</button>
             <button class="btn-save" @click="save">Save Table</button>
           </div>
         </div>
       </div>
     </div>
-    <Teleport to="body">
-      <div
-        v-if="activeTypePickerColumn && typePickerMenuStyle"
-        class="type-picker-menu type-picker-menu-portal"
-        :style="typePickerMenuStyle"
-      >
+
+    <div v-if="activeTypePickerColumn" class="type-browser-backdrop" @click.self="closeTypePicker">
+      <div class="type-browser">
+        <div class="type-browser-header">
+          <div>
+            <div class="type-browser-title">Pick SQL Type</div>
+            <div class="type-browser-subtitle">
+              {{ activeTypePickerColumn.name || 'Column' }} · {{ activeDialectLabel }}
+            </div>
+          </div>
+          <button class="type-browser-close" type="button" @click="closeTypePicker">Close</button>
+        </div>
+
         <button
           v-if="!isTypeVisible(getDisplayType(activeTypePickerColumn.type))"
           type="button"
@@ -177,7 +196,7 @@
             @click="toggleTypeGroup(group.label)"
           >
             <span>{{ group.label }}</span>
-            <span>{{ isTypeGroupCollapsed(group.label) ? '+' : '−' }}</span>
+            <span>{{ isTypeGroupCollapsed(group.label) ? '+' : '-' }}</span>
           </button>
 
           <div v-if="!isTypeGroupCollapsed(group.label)" class="type-group-options">
@@ -196,28 +215,22 @@
           </div>
         </div>
       </div>
-    </Teleport>
+    </div>
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import { useSchemaStore } from '../../stores/schema'
-import type { Table, Column } from '../../types'
-import { SQL_TYPE_OPTIONS, getSqlTypeDescription, getSqlTypeGroups, type SqlTypeDialectFilter } from '../../types/sqlTypes'
+import type { Table, Column, SQLDialect } from '../../types'
+import { SQL_TYPE_OPTIONS, getSqlTypeDescription, getSqlTypeGroups } from '../../types/sqlTypes'
 
-// Simple draggable list using native HTML5 drag
 const DraggableList = {
   props: ['columns'],
   emits: ['update'],
-  setup(props: any, {slots }: any) {
-    return () => {
-      const cols = props.columns
-      return cols.map((col: Column, i: number) =>
-        slots.default({ col, index: i })
-      )
-    }
+  setup(props: any, { slots }: any) {
+    return () => props.columns.map((col: Column, index: number) => slots.default({ col, index }))
   }
 }
 
@@ -227,29 +240,37 @@ const TABLE_COLORS = [
   '#F97316', '#84CC16',
 ]
 
-const TYPE_DIALECTS: { value: Exclude<SqlTypeDialectFilter, 'all'>; label: string; description: string }[] = [
+const TYPE_DIALECTS: { value: SQLDialect; label: string; description: string }[] = [
   { value: 'postgresql', label: 'Postgres', description: 'Show PostgreSQL-specific types, including arrays and JSONB.' },
   { value: 'mysql', label: 'MySQL', description: 'Show MySQL-specific integer, text, and enum types.' },
   { value: 'sqlite', label: 'SQLite', description: 'Show SQLite-friendly storage types.' },
   { value: 'sqlserver', label: 'SQL Server', description: 'Show SQL Server-specific Unicode and binary types.' },
 ]
 
+type DefaultPreset = { label: string; value: string }
+
 const props = defineProps<{ table: Table }>()
 const emit = defineEmits<{ close: []; deleted: [] }>()
 const store = useSchemaStore()
 
 const localTable = reactive<Table>(JSON.parse(JSON.stringify(props.table)))
-const selectedTypeDialect = ref<Exclude<SqlTypeDialectFilter, 'all'>>('postgresql')
+localTable.immutable ??= false
+localTable.columns.forEach(column => { column.immutable ??= false })
+
 const openTypePickerFor = ref<string | null>(null)
 const collapsedTypeGroups = ref<Record<string, boolean>>({})
-const typePickerTriggerById = ref<Record<string, HTMLElement | null>>({})
-const typePickerMenuStyle = ref<Record<string, string> | null>(null)
-const filteredTypeGroups = computed(() => getSqlTypeGroups(selectedTypeDialect.value))
+const defaultPresetByColumn = ref<Record<string, string>>({})
+
+const schemaDialect = computed(() => store.schema.dialect ?? 'postgresql')
+const filteredTypeGroups = computed(() => getSqlTypeGroups(schemaDialect.value))
 const visibleTypeValues = computed(() => new Set(
   filteredTypeGroups.value.flatMap(group => group.types.map(type => type.value))
 ))
 const activeTypePickerColumn = computed(() =>
   localTable.columns.find(column => column.id === openTypePickerFor.value) ?? null
+)
+const activeDialectLabel = computed(() =>
+  TYPE_DIALECTS.find(dialect => dialect.value === schemaDialect.value)?.label ?? 'Database'
 )
 const arrayElementOptions = computed(() =>
   SQL_TYPE_OPTIONS.filter(type =>
@@ -259,56 +280,18 @@ const arrayElementOptions = computed(() =>
   )
 )
 
-function onWindowPointerDown(event: MouseEvent) {
-  const target = event.target as HTMLElement | null
-  if (target?.closest('.type-picker')) return
-  if (target?.closest('.type-picker-menu-portal')) return
+function closeAll() {
+  closeTypePicker()
+  emit('close')
+}
+
+function closeTypePicker() {
   openTypePickerFor.value = null
-  typePickerMenuStyle.value = null
 }
 
-function setTypePickerTrigger(columnId: string, el: Element | ComponentPublicInstance | null) {
-  typePickerTriggerById.value = {
-    ...typePickerTriggerById.value,
-    [columnId]: el instanceof HTMLElement ? el : null,
-  }
+function openTypePicker(columnId: string) {
+  openTypePickerFor.value = columnId
 }
-
-function updateTypePickerPosition(columnId: string) {
-  const trigger = typePickerTriggerById.value[columnId]
-  if (!trigger) return
-  const rect = trigger.getBoundingClientRect()
-  const width = 380
-  const height = 380
-  const viewportWidth = window.innerWidth
-  const viewportHeight = window.innerHeight
-  const left = Math.max(16, Math.min(rect.left, viewportWidth - width - 16))
-  const preferredTop = rect.bottom + 6
-  const top = preferredTop + height > viewportHeight - 16
-    ? Math.max(16, rect.top - height - 6)
-    : preferredTop
-
-  typePickerMenuStyle.value = {
-    position: 'fixed',
-    left: `${left}px`,
-    top: `${top}px`,
-    width: `${width}px`,
-    maxHeight: `${height}px`,
-    zIndex: '1600',
-  }
-}
-
-onMounted(() => {
-  window.addEventListener('mousedown', onWindowPointerDown)
-  window.addEventListener('resize', onWindowResize)
-  window.addEventListener('scroll', onWindowScroll, true)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('mousedown', onWindowPointerDown)
-  window.removeEventListener('resize', onWindowResize)
-  window.removeEventListener('scroll', onWindowScroll, true)
-})
 
 function getTypeDescription(type: string) {
   return getSqlTypeDescription(type)
@@ -320,16 +303,6 @@ function getDisplayType(type: string) {
 
 function isTypeVisible(type: string) {
   return visibleTypeValues.value.has(type)
-}
-
-function toggleTypePicker(columnId: string) {
-  if (openTypePickerFor.value === columnId) {
-    openTypePickerFor.value = null
-    typePickerMenuStyle.value = null
-    return
-  }
-  openTypePickerFor.value = columnId
-  updateTypePickerPosition(columnId)
 }
 
 function toggleTypeGroup(groupLabel: string) {
@@ -353,29 +326,85 @@ function getArrayElementType(type: string) {
 }
 
 function onTypeChange(col: Column, value: string) {
-  if (value === 'ARRAY') {
-    col.type = `${getArrayElementType(col.type)}[]`
-    return
-  }
-  col.type = value
+  col.type = value === 'ARRAY' ? `${getArrayElementType(col.type)}[]` : value
 }
 
 function selectType(col: Column, value: string) {
   onTypeChange(col, value)
-  openTypePickerFor.value = null
-  typePickerMenuStyle.value = null
+  closeTypePicker()
 }
 
 function onArrayElementTypeChange(col: Column, value: string) {
   col.type = `${value}[]`
 }
 
-function onWindowResize() {
-  if (openTypePickerFor.value) updateTypePickerPosition(openTypePickerFor.value)
+function defaultPresetsForColumn(col: Column): DefaultPreset[] {
+  const type = col.type.toUpperCase()
+  const dialect = schemaDialect.value
+
+  if (type === 'UUID' || type === 'UNIQUEIDENTIFIER') {
+    if (dialect === 'postgresql') return [{ label: 'Random UUID', value: 'gen_random_uuid()' }]
+    if (dialect === 'mysql') return [{ label: 'Random UUID', value: 'UUID()' }]
+    if (dialect === 'sqlserver') return [{ label: 'Random UUID', value: 'NEWID()' }]
+    return []
+  }
+
+  if (type === 'BOOLEAN' || type === 'BIT' || type === 'BOOLEAN[]') {
+    return [
+      { label: 'True', value: 'TRUE' },
+      { label: 'False', value: 'FALSE' },
+    ]
+  }
+
+  if (type.includes('JSON')) {
+    return [
+      { label: 'Empty Object', value: "'{}'" },
+      { label: 'Empty Array', value: "'[]'" },
+    ]
+  }
+
+  if (type.endsWith('[]') || type === 'ARRAY') {
+    if (dialect === 'postgresql') return [{ label: 'Empty Array', value: "'{}'" }]
+    return []
+  }
+
+  if (type.includes('INT') || type === 'DECIMAL' || type === 'NUMERIC' || type === 'FLOAT' || type === 'DOUBLE' || type === 'REAL' || type === 'MONEY') {
+    return [{ label: 'Zero', value: '0' }]
+  }
+
+  if (type === 'CHAR' || type === 'VARCHAR' || type === 'TEXT' || type === 'NCHAR' || type === 'NVARCHAR') {
+    return [{ label: 'Empty String', value: "''" }]
+  }
+
+  if (type.includes('DATE') && !type.includes('TIME')) {
+    return [{ label: 'Today', value: dialect === 'sqlserver' ? 'CONVERT(date, GETDATE())' : 'CURRENT_DATE' }]
+  }
+  if (type === 'TIME') {
+    return [{ label: 'Current Time', value: dialect === 'sqlserver' ? 'CONVERT(time, GETDATE())' : 'CURRENT_TIME' }]
+  }
+  if (type.includes('DATETIMEOFFSET')) {
+    return [{ label: 'Now', value: 'SYSDATETIMEOFFSET()' }]
+  }
+  if (type.includes('TIMESTAMPTZ')) {
+    return [{ label: 'Now', value: dialect === 'postgresql' ? 'NOW()' : 'CURRENT_TIMESTAMP' }]
+  }
+  if (type.includes('TIMESTAMP') || type.includes('DATETIME') || type.includes('DATETIME2')) {
+    return [{ label: 'Now', value: dialect === 'sqlserver' ? 'SYSDATETIME()' : 'CURRENT_TIMESTAMP' }]
+  }
+  return []
 }
 
-function onWindowScroll() {
-  if (openTypePickerFor.value) updateTypePickerPosition(openTypePickerFor.value)
+function onDefaultPresetSelected(col: Column, value: string) {
+  defaultPresetByColumn.value = { ...defaultPresetByColumn.value, [col.id]: '' }
+  if (!value) return
+
+  const presetValues = defaultPresetsForColumn(col).map(preset => preset.value)
+  if (!col.defaultValue || presetValues.includes(col.defaultValue)) {
+    col.defaultValue = value
+    return
+  }
+
+  alert('Custom default text was left unchanged. Clear it first if you want to apply a preset.')
 }
 
 function addColumn() {
@@ -386,6 +415,7 @@ function addColumn() {
     nullable: true,
     primaryKey: false,
     unique: false,
+    immutable: false,
     defaultValue: '',
     comment: '',
   })
@@ -400,6 +430,7 @@ function save() {
     name: localTable.name,
     color: localTable.color,
     comment: localTable.comment,
+    immutable: localTable.immutable,
     columns: localTable.columns,
   })
   emit('close')
@@ -429,9 +460,9 @@ function deleteTable() {
   background: #16161a;
   border: 1px solid #2a2a35;
   border-radius: 12px;
-  width: 820px;
-  max-width: 95vw;
-  max-height: 85vh;
+  width: 980px;
+  max-width: 96vw;
+  max-height: 88vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 24px 80px #00000090;
@@ -468,11 +499,6 @@ function deleteTable() {
   padding: 2px 4px;
   outline: none;
   width: 220px;
-  transition: border-color 0.15s;
-}
-
-.table-name-input:focus {
-  border-bottom-color: #3ECF8E;
 }
 
 .color-picker {
@@ -486,11 +512,11 @@ function deleteTable() {
   border-radius: 50%;
   border: 2px solid transparent;
   cursor: pointer;
-  transition: transform 0.15s, border-color 0.15s;
 }
 
-.color-dot:hover, .color-dot.active {
-  transform: scale(1.3);
+.color-dot:hover,
+.color-dot.active {
+  transform: scale(1.2);
   border-color: #ffffff80;
 }
 
@@ -498,6 +524,37 @@ function deleteTable() {
   flex: 1;
   overflow-y: auto;
   padding: 16px 20px;
+}
+
+.modal-body::-webkit-scrollbar,
+.type-browser::-webkit-scrollbar {
+  width: 4px;
+}
+
+.modal-body::-webkit-scrollbar-thumb,
+.type-browser::-webkit-scrollbar-thumb {
+  background: #2a2a35;
+  border-radius: 2px;
+}
+
+.table-settings-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.table-setting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #9ca3af;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.table-setting input,
+.col-check {
+  accent-color: #3ECF8E;
 }
 
 .type-filter-row {
@@ -508,60 +565,32 @@ function deleteTable() {
   margin-bottom: 14px;
 }
 
-.type-filter-label {
+.type-filter-label,
+.col-head {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #555;
 }
-
-.type-filter-tabs {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.type-filter-tab {
-  border: 1px solid #2a2a35;
-  background: #121218;
-  color: #777;
-  border-radius: 999px;
-  padding: 5px 10px;
+.type-filter-value {
+  color: #9ca3af;
   font-size: 11px;
-  cursor: pointer;
-  transition: all 0.15s;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
-.type-filter-tab:hover {
-  color: #d0d0d8;
-  border-color: #3a3a50;
-}
-
-.type-filter-tab.active {
-  color: #3ECF8E;
-  border-color: #3ECF8E50;
-  background: #3ECF8E14;
-}
-
-.modal-body::-webkit-scrollbar { width: 4px; }
-.modal-body::-webkit-scrollbar-thumb { background: #2a2a35; border-radius: 2px; }
-
-.columns-header {
+.columns-header,
+.column-editor-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 0 8px 0;
-  border-bottom: 1px solid #1e1e28;
-  margin-bottom: 4px;
 }
 
-.col-head {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #444;
+.columns-header {
+  padding: 0 0 8px;
+  border-bottom: 1px solid #1e1e28;
+  margin-bottom: 4px;
 }
 
 .col-head.center {
@@ -569,9 +598,6 @@ function deleteTable() {
 }
 
 .column-editor-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   padding: 5px 0;
   border-bottom: 1px solid #1a1a22;
 }
@@ -586,7 +612,7 @@ function deleteTable() {
 .drag-handle {
   color: #333;
   cursor: grab;
-  font-size: 14px;
+  font-size: 12px;
   width: 16px;
 }
 
@@ -599,7 +625,6 @@ function deleteTable() {
   font-size: 12.5px;
   font-family: 'JetBrains Mono', monospace;
   outline: none;
-  transition: border-color 0.15s;
   min-width: 0;
 }
 
@@ -607,14 +632,9 @@ function deleteTable() {
   border-color: #3ECF8E40;
 }
 
-.col-type-select {
-  background: #1a1a22;
+.col-type-select,
+.type-picker-trigger {
   cursor: pointer;
-}
-
-.type-picker {
-  position: relative;
-  min-width: 0;
 }
 
 .type-picker-trigger {
@@ -622,7 +642,6 @@ function deleteTable() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
   text-align: left;
 }
 
@@ -638,20 +657,169 @@ function deleteTable() {
   flex-shrink: 0;
 }
 
-.type-picker-menu {
-  width: 380px;
-  max-height: 380px;
-  overflow-y: auto;
-  padding: 8px;
-  border: 1px solid #2a2a35;
-  border-radius: 10px;
-  background: #121218;
-  box-shadow: 0 18px 40px #00000070;
-  z-index: 30;
+.array-type-select,
+.array-type-placeholder {
+  width: 140px;
+  min-width: 140px;
+  flex-shrink: 0;
 }
 
-.type-picker-menu::-webkit-scrollbar { width: 4px; }
-.type-picker-menu::-webkit-scrollbar-thumb { background: #2a2a35; border-radius: 2px; }
+.type-help-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #2a2a35;
+  background: #121218;
+  color: #777;
+  cursor: help;
+  flex-shrink: 0;
+}
+
+.type-help-btn:hover {
+  color: #3ECF8E;
+  border-color: #3ECF8E40;
+}
+
+.col-check {
+  width: 36px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.default-preset-select {
+  width: 88px;
+  min-width: 88px;
+  flex-shrink: 0;
+}
+
+.del-col-btn {
+  background: none;
+  border: none;
+  color: #555;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+}
+
+.del-col-btn:hover {
+  color: #EF4444;
+  background: #EF444415;
+}
+
+.add-col-btn {
+  margin-top: 10px;
+  background: none;
+  border: 1px dashed #2a2a35;
+  color: #555;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 12px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.add-col-btn:hover {
+  color: #3ECF8E;
+  border-color: #3ECF8E50;
+}
+
+.modal-footer {
+  padding: 14px 20px;
+  border-top: 1px solid #1e1e28;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footer-right {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-cancel,
+.btn-danger {
+  background: none;
+  border: 1px solid #2a2a35;
+  color: #888;
+  border-radius: 7px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-save {
+  background: #3ECF8E;
+  color: #0a1a12;
+  border: none;
+  border-radius: 7px;
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-danger {
+  border-color: #EF444440;
+  color: #EF4444;
+}
+
+.btn-danger:hover {
+  background: #EF444415;
+}
+
+.type-browser-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  background: rgba(0, 0, 0, 0.22);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 56px 24px 24px;
+}
+
+.type-browser {
+  width: min(560px, 100%);
+  max-height: min(72vh, 620px);
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid #2a2a35;
+  border-radius: 14px;
+  background: #121218;
+  box-shadow: 0 24px 56px #0000007a;
+}
+
+.type-browser-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.type-browser-title {
+  color: #f0f0f0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.type-browser-subtitle {
+  color: #777;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.type-browser-close {
+  border: 1px solid #2a2a35;
+  background: #17171d;
+  color: #9ca3af;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 11px;
+  cursor: pointer;
+}
 
 .type-group + .type-group {
   margin-top: 8px;
@@ -673,12 +841,6 @@ function deleteTable() {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.type-group-toggle:hover {
-  color: #f0f0f0;
-  background: #1c1c24;
 }
 
 .type-group-options {
@@ -701,17 +863,12 @@ function deleteTable() {
   color: #d0d0d8;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
 
-.type-option:hover {
+.type-option:hover,
+.type-option.active {
   border-color: #3ECF8E40;
   background: #1c1f26;
-}
-
-.type-option.active {
-  border-color: #3ECF8E55;
-  background: #3ECF8E14;
 }
 
 .type-option.current {
@@ -728,140 +885,5 @@ function deleteTable() {
   color: #808095;
   font-size: 10px;
   line-height: 1.35;
-}
-
-.type-help-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 1px solid #2a2a35;
-  background: #121218;
-  color: #777;
-  cursor: help;
-  flex-shrink: 0;
-  transition: all 0.15s;
-}
-
-.type-help-btn:hover {
-  color: #3ECF8E;
-  border-color: #3ECF8E40;
-}
-
-.array-type-select {
-  width: 140px;
-  min-width: 140px;
-}
-
-.array-type-placeholder {
-  width: 140px;
-  min-width: 140px;
-  flex-shrink: 0;
-}
-
-.col-check {
-  width: 36px;
-  height: 16px;
-  cursor: pointer;
-  accent-color: #3ECF8E;
-  flex-shrink: 0;
-}
-
-.del-col-btn {
-  background: none;
-  border: none;
-  color: #333;
-  cursor: pointer;
-  font-size: 12px;
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: color 0.15s, background 0.15s;
-  flex-shrink: 0;
-}
-
-.del-col-btn:hover {
-  color: #EF4444;
-  background: #EF444415;
-}
-
-.add-col-btn {
-  margin-top: 10px;
-  background: none;
-  border: 1px dashed #2a2a35;
-  color: #555;
-  border-radius: 6px;
-  padding: 8px 16px;
-  font-size: 12px;
-  cursor: pointer;
-  width: 100%;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.add-col-btn:hover {
-  color: #3ECF8E;
-  border-color: #3ECF8E50;
-}
-
-.modal-footer {
-  padding: 14px 20px;
-  border-top: 1px solid #1e1e28;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.footer-right {
-  display: flex;
-  gap: 8px;
-}
-
-.btn-cancel {
-  background: none;
-  border: 1px solid #2a2a35;
-  color: #888;
-  border-radius: 7px;
-  padding: 8px 16px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-cancel:hover {
-  color: #e0e0e0;
-  background: #1e1e28;
-}
-
-.btn-save {
-  background: #3ECF8E;
-  color: #0a1a12;
-  border: none;
-  border-radius: 7px;
-  padding: 8px 20px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.btn-save:hover {
-  background: #45e09a;
-}
-
-.btn-danger {
-  background: none;
-  border: 1px solid #EF444440;
-  color: #EF4444;
-  border-radius: 7px;
-  padding: 8px 16px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-danger:hover {
-  background: #EF444415;
 }
 </style>

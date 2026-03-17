@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useSchemaStore } from '../../stores/schema'
 import type { SQLDialect } from '../../types'
 import { saveExportFile } from '../../composables/useFileExport'
@@ -55,8 +55,12 @@ const dialects: { label: string; value: SQLDialect }[] = [
   { label: 'SQL Server', value: 'sqlserver' },
 ]
 
-const dialect = ref<SQLDialect>('postgresql')
+const dialect = ref<SQLDialect>(store.schema.dialect ?? 'postgresql')
 const copied = ref(false)
+
+watch(() => store.schema.dialect, (value) => {
+  if (value) dialect.value = value
+}, { immediate: true })
 
 const sql = computed(() => store.exportSQL(dialect.value))
 const lineCount = computed(() => sql.value.split('\n').length)

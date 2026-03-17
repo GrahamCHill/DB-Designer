@@ -101,21 +101,55 @@ export function normalizeSqlType(type: string, dialect: SQLDialect): string {
   }
 
   const normalized = raw.toUpperCase()
+  const option = SQL_TYPE_OPTIONS.find(candidate => candidate.value === normalized)
   const genericByDialect: Record<string, Partial<Record<SQLDialect, string>>> = {
     BOOLEAN: { sqlite: 'INTEGER', sqlserver: 'BIT' },
     DOUBLE: { postgresql: 'DOUBLE PRECISION', sqlite: 'REAL', sqlserver: 'FLOAT' },
     FLOAT: { sqlite: 'REAL' },
     UUID: { mysql: 'CHAR(36)', sqlite: 'TEXT', sqlserver: 'UNIQUEIDENTIFIER' },
+    'CHAR(36)': { postgresql: 'UUID', mysql: 'CHAR(36)', sqlite: 'TEXT', sqlserver: 'UNIQUEIDENTIFIER' },
+    UNIQUEIDENTIFIER: { postgresql: 'UUID', mysql: 'CHAR(36)', sqlite: 'TEXT' },
     JSONB: { mysql: 'JSON', sqlite: 'TEXT', sqlserver: 'NVARCHAR(MAX)' },
     JSON: { sqlite: 'TEXT', sqlserver: 'NVARCHAR(MAX)' },
     BYTEA: { mysql: 'BLOB', sqlite: 'BLOB', sqlserver: 'VARBINARY(MAX)' },
+    BLOB: { postgresql: 'BYTEA', sqlserver: 'VARBINARY(MAX)' },
+    'VARBINARY(MAX)': { postgresql: 'BYTEA', mysql: 'BLOB', sqlite: 'BLOB' },
     TIMESTAMPTZ: { mysql: 'DATETIME', sqlite: 'TEXT', sqlserver: 'DATETIMEOFFSET' },
+    DATETIME: { postgresql: 'TIMESTAMP', sqlite: 'TEXT', sqlserver: 'DATETIME2' },
     TIMESTAMP: { sqlserver: 'DATETIME2' },
+    DATETIMEOFFSET: { postgresql: 'TIMESTAMPTZ', mysql: 'DATETIME', sqlite: 'TEXT' },
+    DATETIME2: { postgresql: 'TIMESTAMP', mysql: 'DATETIME', sqlite: 'TEXT' },
     SERIAL: { mysql: 'INT AUTO_INCREMENT', sqlite: 'INTEGER', sqlserver: 'INT IDENTITY(1,1)' },
     BIGSERIAL: { mysql: 'BIGINT AUTO_INCREMENT', sqlite: 'INTEGER', sqlserver: 'BIGINT IDENTITY(1,1)' },
+    MONEY: { mysql: 'DECIMAL', sqlite: 'NUMERIC', sqlserver: 'DECIMAL' },
+    ENUM: { sqlite: 'VARCHAR', sqlserver: 'VARCHAR' },
+    SET: { postgresql: 'VARCHAR', sqlite: 'VARCHAR', sqlserver: 'VARCHAR' },
+    XML: { mysql: 'TEXT', sqlite: 'TEXT' },
+    INET: { mysql: 'VARCHAR', sqlite: 'TEXT', sqlserver: 'VARCHAR' },
+    CIDR: { mysql: 'VARCHAR', sqlite: 'TEXT', sqlserver: 'VARCHAR' },
+    TSVECTOR: { mysql: 'TEXT', sqlite: 'TEXT', sqlserver: 'TEXT' },
+    TSQUERY: { mysql: 'TEXT', sqlite: 'TEXT', sqlserver: 'TEXT' },
+    YEAR: { postgresql: 'INTEGER', sqlite: 'INTEGER', sqlserver: 'INTEGER' },
+    NCHAR: { postgresql: 'CHAR', mysql: 'CHAR', sqlite: 'CHAR' },
+    NVARCHAR: { postgresql: 'VARCHAR', mysql: 'VARCHAR', sqlite: 'TEXT' },
   }
 
-  return genericByDialect[normalized]?.[dialect] ?? raw
+  if (genericByDialect[normalized]?.[dialect]) {
+    return genericByDialect[normalized]![dialect]!
+  }
+
+  if (option && !option.dialects.includes(dialect)) {
+    const canonical = canonicalSqlType(normalized)
+    if (genericByDialect[canonical]?.[dialect]) {
+      return genericByDialect[canonical]![dialect]!
+    }
+    if (option.group === 'Text' || option.group === 'Specialized') return dialect === 'sqlite' ? 'TEXT' : 'VARCHAR'
+    if (option.group === 'Numeric') return 'NUMERIC'
+    if (option.group === 'Document / Binary') return dialect === 'sqlserver' ? 'NVARCHAR(MAX)' : 'TEXT'
+    if (option.group === 'Collection') return dialect === 'mysql' ? 'JSON' : dialect === 'sqlserver' ? 'NVARCHAR(MAX)' : 'TEXT'
+  }
+
+  return raw
 }
 
 export function canonicalSqlType(type: string): string {
@@ -153,7 +187,8 @@ export function areSqlTypesCompatible(left: string, right: string): boolean {
   const compatibleGroups = [
     new Set(['INTEGER', 'SMALLINT', 'BIGINT', 'SERIAL', 'BIGSERIAL', 'TINYINT', 'MEDIUMINT']),
     new Set(['DECIMAL', 'NUMERIC', 'FLOAT', 'DOUBLE', 'REAL', 'MONEY']),
-    new Set(['VARCHAR', 'TEXT', 'CHAR', 'NCHAR', 'NVARCHAR', 'UUID']),
+    new Set(['VARCHAR', 'TEXT', 'CHAR', 'NCHAR', 'NVARCHAR']),
+    new Set(['UUID']),
     new Set(['DATE', 'TIME', 'TIMESTAMP', 'TIMESTAMPTZ', 'DATETIME']),
     new Set(['JSON', 'JSONB']),
     new Set(['BYTEA', 'BLOB', 'VARBINARY']),
