@@ -86,6 +86,10 @@ export function normalizeSqlType(type: string, dialect: SQLDialect): string {
   const raw = type.trim()
   if (!raw) return 'TEXT'
 
+  const upper = raw.toUpperCase()
+  const withoutParams = upper.replace(/\(.*\)/, '').trim()
+  const isUuidChar = /^CHAR\s*\(\s*36\s*\)$/.test(upper) || /^VARCHAR\s*\(\s*36\s*\)$/.test(upper)
+
   if (raw === 'ARRAY') {
     if (dialect === 'postgresql') return 'TEXT[]'
     if (dialect === 'sqlserver') return 'NVARCHAR(MAX)'
@@ -100,8 +104,8 @@ export function normalizeSqlType(type: string, dialect: SQLDialect): string {
     return 'TEXT'
   }
 
-  const normalized = raw.toUpperCase()
-  const option = SQL_TYPE_OPTIONS.find(candidate => candidate.value === normalized)
+  const normalized = upper
+  const option = SQL_TYPE_OPTIONS.find(candidate => candidate.value === normalized || candidate.value === withoutParams)
   const genericByDialect: Record<string, Partial<Record<SQLDialect, string>>> = {
     BOOLEAN: { sqlite: 'INTEGER', sqlserver: 'BIT' },
     DOUBLE: { postgresql: 'DOUBLE PRECISION', sqlite: 'REAL', sqlserver: 'FLOAT' },
@@ -134,8 +138,16 @@ export function normalizeSqlType(type: string, dialect: SQLDialect): string {
     NVARCHAR: { postgresql: 'VARCHAR', mysql: 'VARCHAR', sqlite: 'TEXT' },
   }
 
+  if (isUuidChar) {
+    return genericByDialect.UUID[dialect] ?? raw
+  }
+
   if (genericByDialect[normalized]?.[dialect]) {
     return genericByDialect[normalized]![dialect]!
+  }
+
+  if (genericByDialect[withoutParams]?.[dialect]) {
+    return genericByDialect[withoutParams]![dialect]!
   }
 
   if (option && !option.dialects.includes(dialect)) {
