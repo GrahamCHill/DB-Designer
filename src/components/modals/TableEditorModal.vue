@@ -45,7 +45,7 @@
             <span class="col-head" style="width:140px">Array Element</span>
             <span class="col-head center" style="width:28px" title="Type help">?</span>
             <span class="col-head center" style="width:36px" title="Primary Key">PK</span>
-            <span class="col-head center" style="width:36px" title="Nullable">NULL</span>
+            <span class="col-head center" style="width:36px" title="Not Null">NN</span>
             <span class="col-head center" style="width:36px" title="Unique">UQ</span>
             <span class="col-head center" style="width:42px" title="Immutable">IMM</span>
             <span class="col-head" style="flex:1">Default</span>
@@ -106,10 +106,12 @@
                   @change="if (col.primaryKey) { col.nullable = false; col.unique = true }"
                 />
                 <input
-                  v-model="col.nullable"
+                  :checked="!col.nullable"
                   type="checkbox"
                   class="col-check"
                   :disabled="col.primaryKey"
+                  :title="col.nullable ? 'Allow NULL values' : 'Emit NOT NULL in SQL'"
+                  @change="col.nullable = !(($event.target as HTMLInputElement).checked)"
                 />
                 <input
                   v-model="col.unique"
