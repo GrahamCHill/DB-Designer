@@ -35,7 +35,7 @@
           Load .dbm.json
           <input type="file" accept=".json" style="display:none" @change="loadSchema" />
         </label>
-        <button v-if="dbStore.schema.tables.length" class="btn-use-current" @click="useCurrentSchema">
+        <button v-if="dbStore.sqlTables.length" class="btn-use-current" @click="useCurrentSchema">
           Use current DB
         </button>
       </div>
@@ -301,7 +301,7 @@ function tableCandidates(name: string) {
 }
 
 function findSchemaTableIdForRestNode(node: RestNode) {
-  const tables = dbStore.schema.tables
+  const tables = dbStore.sqlTables
   if (!tables.length) return null
 
   if (node.kind === 'type') {
@@ -413,7 +413,10 @@ function loadSchema(e: Event) {
 }
 
 function useCurrentSchema() {
-  store.loadDbSchema(dbStore.schema)
+  store.loadDbSchema({
+    ...dbStore.schema,
+    tables: dbStore.sqlTables,
+  })
 }
 
 function importTable(table: any) {

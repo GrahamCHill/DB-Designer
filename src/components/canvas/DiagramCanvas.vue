@@ -7,7 +7,7 @@
     @mouseup="onMouseUp"
     @mouseleave="onMouseUp"
     @wheel.prevent="onWheel"
-    @contextmenu.prevent
+    @contextmenu.prevent="openContextMenu"
   >
     <div class="canvas-content" :style="contentStyle">
       <!-- Groups rendered in depth order: deepest (largest area) first, shallowest on top -->
@@ -88,7 +88,7 @@
 
       <!-- Tables -->
       <TableNode
-        v-for="table in store.schema.tables"
+        v-for="table in sqlTables"
         :key="table.id"
         :table="table"
         :selected="store.selectedTableId === table.id"
@@ -99,23 +99,54 @@
         :mismatched-columns="mismatchedColsByTable.get(table.id) ?? emptySet"
         :invalid-columns="invalidColsByTable.get(table.id) ?? emptySet"
         :column-issues="columnIssuesByTable.get(table.id) ?? emptyIssues"
-        :read-only="readOnly && !interactive"
-        @mousedown.stop="!readOnly && startTableDrag(table.id, $event)"
+        :read-only="props.readOnly && !props.interactive"
+        @mousedown.stop="!props.readOnly && startTableDrag(table.id, $event)"
         @select="selectTable(table.id)"
-        @start-relation="!readOnly && startRelation(table.id, $event)"
-        @end-relation="!readOnly && endRelation(table.id, $event)"
-        @edit="!readOnly && (store.editingTableId = table.id)"
-        @delete="!readOnly && store.deleteTable(table.id)"
-        @resize-start="!readOnly && startTableResize(table.id, $event)"
+        @start-relation="!props.readOnly && startRelation(table.id, $event)"
+        @end-relation="!props.readOnly && endRelation(table.id, $event)"
+        @edit="!props.readOnly && (store.editingTableId = table.id)"
+        @delete="!props.readOnly && store.deleteTable(table.id)"
+        @resize-start="!props.readOnly && startTableResize(table.id, $event)"
         @generate-api="$emit('generate-api', $event)"
+      />
+
+      <ResourceNode
+        v-for="resource in resourceTables"
+        :key="resource.id"
+        :table="resource"
+        :selected="store.selectedTableId === resource.id"
+        :highlighted="highlightedTableIds.has(resource.id) && store.selectedTableId !== resource.id"
+        :connected-as-source="sourceColsByTable.get(resource.id) ?? emptySet"
+        :connected-as-target="targetColsByTable.get(resource.id) ?? emptySet"
+        :read-only="props.readOnly && !props.interactive"
+        @mousedown.stop="!props.readOnly && startTableDrag(resource.id, $event)"
+        @select="selectTable(resource.id)"
+        @start-relation="!props.readOnly && startRelation(resource.id, $event)"
+        @end-relation="!props.readOnly && endRelation(resource.id, $event)"
+        @edit="!props.readOnly && (store.editingTableId = resource.id)"
+        @delete="!props.readOnly && store.deleteTable(resource.id)"
       />
     </div>
 
     <!-- Empty state -->
     <div v-if="store.schema.tables.length === 0 && store.schema.groups.length === 0" class="empty-state">
-      <div class="empty-hex">â¬¡</div>
+      <div class="empty-hex">[]</div>
       <p>Canvas is empty</p>
-      <span>Use the sidebar to add tables or groups</span>
+      <span>Use the sidebar or right-click to add tables, resources, or groups</span>
+    </div>
+
+    <div
+      v-if="contextMenu"
+      class="canvas-context-menu"
+      :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+    >
+      <button class="context-menu-item" @click="createAtContext('table')">New Table</button>
+      <button class="context-menu-item" @click="createAtContext('group')">New Group</button>
+      <button class="context-menu-item" @click="createAtContext('blob-storage')">Blob Storage</button>
+      <button class="context-menu-item" @click="createAtContext('nosql-database')">NoSQL Database</button>
+      <button class="context-menu-item" @click="createAtContext('cache')">Cache</button>
+      <button class="context-menu-item" @click="createAtContext('message-queue')">Message Queue</button>
+      <button class="context-menu-item" @click="createAtContext('external-service')">External Service</button>
     </div>
 
     <!-- Relation type bar (appears when a relation is selected) -->
@@ -138,7 +169,7 @@
     </div>
 
     <!-- Minimap -->
-    <MinimapPanel v-if="store.showMinimap && !readOnly" :pan="pan" :zoom="zoom" :viewport-w="canvasW" :viewport-h="canvasH"
+    <MinimapPanel v-if="store.showMinimap && !props.readOnly" :pan="pan" :zoom="zoom" :viewport-w="canvasW" :viewport-h="canvasH"
       @navigate="onMinimapNavigate" />
 
     <!-- Group editor modal -->
@@ -154,22 +185,26 @@
 import { ref, computed, reactive, onMounted, onUnmounted } from 'vue'
 import { useSchemaStore } from '../../stores/schema'
 import TableNode from './TableNode.vue'
+import ResourceNode from './ResourceNode.vue'
 import GroupNode from './GroupNode.vue'
 import MinimapPanel from './MinimapPanel.vue'
 import GroupEditorModal from '../modals/GroupEditorModal.vue'
-import type { Relation, RelationType } from '../../types'
+import type { Relation, RelationType, ResourceNodeType } from '../../types'
 import { TABLE_WIDTH, TABLE_HEADER_H, TABLE_COL_PAD_TOP, TABLE_ROW_H } from '../../types'
 import { getDescendants } from '../../composables/useContainment'
 import { areSqlTypesCompatible } from '../../types/sqlTypes'
 
-defineProps<{
+const props = defineProps<{
   readOnly?: boolean
   interactive?: boolean
 }>()
 
 const store = useSchemaStore()
+const sqlTables = computed(() => store.sqlTables)
+const resourceTables = computed(() => store.resourceTables)
 const emptySet = new Set<string>()  // stable empty set so Vue doesn't re-render every frame
 const emptyIssues: Record<string, string[]> = {}
+const contextMenu = ref<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null)
 const canvasEl = ref<HTMLDivElement>()
 const canvasW  = ref(800)
 const canvasH  = ref(600)
@@ -317,6 +352,12 @@ function toCanvas(clientX: number, clientY: number) {
 function connectorPos(tableId: string, colId: string, side: 'left' | 'right') {
   const table = store.schema.tables.find(t => t.id === tableId)
   if (!table) return { x: 0, y: 0 }
+  if ((table.kind ?? 'table') === 'resource') {
+    return {
+      x: table.position.x + (side === 'right' ? (table.width ?? TABLE_WIDTH) : 0),
+      y: table.position.y + 72,
+    }
+  }
   const idx = Math.max(0, table.columns.findIndex(c => c.id === colId))
   return {
     x: table.position.x + (side === 'right' ? (table.width ?? TABLE_WIDTH) : 0),
@@ -495,31 +536,39 @@ const relationValidationById = computed(() => {
     const targetTable = store.schema.tables.find(t => t.id === rel.targetTableId)
     const sourceCol = sourceTable?.columns.find(c => c.id === rel.sourceColumnId)
     const targetCol = targetTable?.columns.find(c => c.id === rel.targetColumnId)
+    const isResourceRelation =
+      (sourceTable?.kind ?? 'table') === 'resource' ||
+      (targetTable?.kind ?? 'table') === 'resource'
     const messages: string[] = []
 
     if (!sourceCol) messages.push('Referenced column no longer exists.')
     if (!targetCol) messages.push('Foreign key column no longer exists.')
 
-    const typeMismatch = !!(sourceCol && targetCol && !areSqlTypesCompatible(sourceCol.type, targetCol.type))
+    const typeMismatch = !!(
+      !isResourceRelation &&
+      sourceCol &&
+      targetCol &&
+      !areSqlTypesCompatible(sourceCol.type, targetCol.type)
+    )
     if (typeMismatch && sourceCol && targetCol) {
       messages.push(`Type mismatch: ${targetCol.type} cannot safely reference ${sourceCol.type}.`)
     }
 
-    const invalidTarget = !!(sourceCol && !sourceCol.primaryKey && !sourceCol.unique)
+    const invalidTarget = !!(!isResourceRelation && sourceCol && !sourceCol.primaryKey && !sourceCol.unique)
     if (invalidTarget) {
       messages.push('Referenced column should be PRIMARY KEY or UNIQUE.')
     }
 
-    const circular = createsCircularDependency(rel)
+    const circular = !isResourceRelation && createsCircularDependency(rel)
     if (circular) {
       messages.push('Circular foreign key dependency detected across related tables.')
     }
 
-    if (rel.type === 'one-to-one' && targetCol && !targetCol.primaryKey && !targetCol.unique) {
+    if (!isResourceRelation && rel.type === 'one-to-one' && targetCol && !targetCol.primaryKey && !targetCol.unique) {
       messages.push('One-to-one relations require the foreign key column to be UNIQUE or PRIMARY KEY.')
     }
 
-    if (rel.type === 'many-to-many') {
+    if (!isResourceRelation && rel.type === 'many-to-many') {
       messages.push('Many-to-many needs a junction table. This direct connection will not generate a valid DB constraint.')
     }
 
@@ -633,6 +682,9 @@ const editingGroupData = computed(() =>
 // â”€â”€ Canvas mouse down â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function onCanvasMouseDown(e: MouseEvent) {
+  contextMenu.value = null
+  if (props.readOnly) return
+  if (e.button === 2) return
   const target = e.target as HTMLElement
   const isBackground =
     target === canvasEl.value ||
@@ -695,6 +747,38 @@ function onMouseMove(e: MouseEvent) {
     if (!relationWaypointById[d.id]) return
     relationWaypointById[d.id][d.waypointIndex] = { x: d.origX + dx, y: d.origY + dy }
   }
+}
+
+function openContextMenu(e: MouseEvent) {
+  if (props.readOnly) return
+  const target = e.target as HTMLElement
+  const isBackground =
+    target === canvasEl.value ||
+    target.classList.contains('canvas-content') ||
+    target.classList.contains('relations-svg')
+
+  if (!isBackground) {
+    contextMenu.value = null
+    return
+  }
+
+  const pos = toCanvas(e.clientX, e.clientY)
+  const rect = canvasEl.value!.getBoundingClientRect()
+  contextMenu.value = {
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top,
+    canvasX: pos.x,
+    canvasY: pos.y,
+  }
+}
+
+function createAtContext(kind: 'table' | 'group' | ResourceNodeType) {
+  if (!contextMenu.value) return
+  const position = { x: contextMenu.value.canvasX, y: contextMenu.value.canvasY }
+  if (kind === 'table') store.createTable(position)
+  else if (kind === 'group') store.createGroup(position)
+  else store.createResource(kind, position)
+  contextMenu.value = null
 }
 
 // â”€â”€ Mouse up â€” commit containment â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1000,6 +1084,36 @@ function selectRelation(id: string) {
 .empty-hex { font-size: 56px; opacity: 0.07; margin-bottom: 4px; }
 .empty-state p  { font-size: 17px; font-weight: 600; color: #ffffff22; margin: 0; }
 .empty-state span { font-size: 13px; color: #ffffff12; }
+
+.canvas-context-menu {
+  position: absolute;
+  z-index: 260;
+  min-width: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  background: #10131a;
+  border: 1px solid #2a3140;
+  border-radius: 12px;
+  box-shadow: 0 18px 40px #00000075;
+}
+
+.context-menu-item {
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #dbe4f0;
+  text-align: left;
+  padding: 9px 11px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.context-menu-item:hover {
+  background: #17202b;
+  color: #3ECF8E;
+}
 
 .rel-type-bar {
   position: absolute; bottom: 72px; left: 50%; transform: translateX(-50%);

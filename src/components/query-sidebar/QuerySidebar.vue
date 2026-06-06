@@ -16,7 +16,7 @@
             <input type="file" accept=".json" style="display: none" @change="loadSchema" />
           </label>
         </div>
-        <button v-if="!schemaName && dbStore.schema.tables.length" class="btn-use-current" @click="useCurrentSchema">
+        <button v-if="!schemaName && dbStore.sqlTables.length" class="btn-use-current" @click="useCurrentSchema">
           Use current DB schema
         </button>
       </div>
@@ -149,7 +149,7 @@ const schemaName = ref('')
 
 const schemaTables = computed<SchemaTable[]>(() => {
   if (externalSchema.value) return externalSchema.value
-  return dbStore.schema.tables.map((table) => ({
+  return dbStore.sqlTables.map((table) => ({
     name: table.name,
     color: table.color,
     columns: table.columns.map((column) => ({ name: column.name })),
@@ -170,7 +170,9 @@ function loadSchema(e: Event) {
     try {
       const raw = JSON.parse(event.target?.result as string)
       const schema = raw.tables ? raw : raw.schema ?? raw
-      externalSchema.value = (schema.tables ?? []).map((table: any) => ({
+      externalSchema.value = (schema.tables ?? [])
+        .filter((table: any) => (table.kind ?? 'table') === 'table')
+        .map((table: any) => ({
         name: table.name,
         color: table.color ?? '#3ECF8E',
         columns: (table.columns ?? []).map((column: any) => ({ name: column.name })),

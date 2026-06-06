@@ -66,6 +66,8 @@ function loadSchema(schemaId: string): Schema | null {
         // @ts-ignore
         return ({
           ...t,
+          kind: t.kind ?? 'table',
+          resourceType: t.resourceType ?? null,
           groupId: t.groupId ?? null,
           immutable: t.immutable ?? false,
           columns: (t.columns ?? []).map(c => ({
@@ -142,9 +144,13 @@ export const useTabsStore = defineStore('tabs', () => {
     if (idx === -1) return
 
     const tab = tabs.value[idx]
-    deleteSchemaFromStorage(tab.schemaId)
-    delete schemaCache.value[tab.schemaId]
     tabs.value.splice(idx, 1)
+
+    const schemaStillReferenced = tabs.value.some(candidate => candidate.schemaId === tab.schemaId)
+    if (!schemaStillReferenced) {
+      deleteSchemaFromStorage(tab.schemaId)
+      delete schemaCache.value[tab.schemaId]
+    }
 
     if (tabs.value.length === 0) {
       // Always keep at least one tab
@@ -181,9 +187,24 @@ export const useTabsStore = defineStore('tabs', () => {
   }
 
   function loadSchemaIntoNewTab(schema: Schema) {
-    schemaCache.value[schema.id] = schema
-    persistSchema(schema)
-    const tab: Tab = { id: uuidv4(), schemaId: schema.id, label: schema.name, isDirty: false }
+    const clonedSchema: Schema = {
+      ...schema,
+      id: uuidv4(),
+      tables: (schema.tables ?? []).map(table => ({
+        ...table,
+        columns: (table.columns ?? []).map(column => ({ ...column })),
+      })),
+      relations: (schema.relations ?? []).map(relation => ({
+        ...relation,
+        waypoints: relation.waypoints ? relation.waypoints.map(waypoint => ({ ...waypoint })) : [],
+      })),
+      groups: (schema.groups ?? []).map(group => ({ ...group })),
+      updatedAt: new Date().toISOString(),
+    }
+
+    schemaCache.value[clonedSchema.id] = clonedSchema
+    persistSchema(clonedSchema)
+    const tab: Tab = { id: uuidv4(), schemaId: clonedSchema.id, label: clonedSchema.name, isDirty: false }
     tabs.value.push(tab)
     activeTabId.value = tab.id
     saveTabs()

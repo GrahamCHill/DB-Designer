@@ -15,7 +15,7 @@
               @click="dialect = d.value"
             >{{ d.label }}</button>
           </div>
-          <button class="close-btn" @click="$emit('close')">✕</button>
+          <button class="close-btn" @click="$emit('close')">x</button>
         </div>
 
         <div class="modal-body">
@@ -28,7 +28,7 @@
             <button class="btn-copy" @click="copy">
               {{ copied ? '✓ Copied!' : '⎘ Copy' }}
             </button>
-            <button class="btn-download" @click="download">↓ Download .sql</button>
+            <button class="btn-download" @click="download">Download .sql</button>
           </div>
         </div>
       </div>

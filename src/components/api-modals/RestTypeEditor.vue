@@ -4,7 +4,7 @@
     <div class="modal">
       <div class="modal-header">
         <span class="modal-title">Edit Type</span>
-        <button class="close-btn" @click="$emit('close')">✕</button>
+        <button class="close-btn" @click="$emit('close')">x</button>
       </div>
       <div class="modal-body">
         <div class="field-row">
@@ -23,7 +23,7 @@
           <input v-model="f.name" placeholder="fieldName" class="sm-input flex-1" />
           <input v-model="f.type" placeholder="string" class="sm-input w100" />
           <label class="req-check"><input type="checkbox" v-model="f.required" /> req</label>
-          <button class="del-btn" @click="draft.fields.splice(i,1)">✕</button>
+          <button class="del-btn" @click="draft.fields.splice(i,1)">x</button>
         </div>
       </div>
       <div class="modal-footer">

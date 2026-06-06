@@ -4,7 +4,7 @@
       <div class="modal-header">
         <span class="kind-badge" :style="{ background: kindColor + '20', color: kindColor }">{{ node.kind }}</span>
         <span class="modal-title">{{ draft.name }}</span>
-        <button class="close-btn" @click="$emit('close')">✕</button>
+        <button class="close-btn" @click="$emit('close')">x</button>
       </div>
       <div class="modal-body">
         <div class="field-row">
@@ -29,7 +29,7 @@
           <div v-for="(v, i) in draft.values" :key="i" class="param-row">
             <input :value="v" @input="draft.values[i] = ($event.target as HTMLInputElement).value"
               placeholder="VALUE" class="sm-input flex-1" />
-            <button class="del-btn" @click="draft.values.splice(i,1)">✕</button>
+            <button class="del-btn" @click="draft.values.splice(i,1)">x</button>
           </div>
         </template>
 
@@ -42,7 +42,7 @@
           <div v-for="(v, i) in draft.values" :key="i" class="param-row">
             <input :value="v" @input="draft.values[i] = ($event.target as HTMLInputElement).value"
               placeholder="TypeName" class="sm-input flex-1" />
-            <button class="del-btn" @click="draft.values.splice(i,1)">✕</button>
+            <button class="del-btn" @click="draft.values.splice(i,1)">x</button>
           </div>
         </template>
 
@@ -67,7 +67,7 @@
               <label class="req-check">
                 <input type="checkbox" v-model="f.isDeprecated" /> dep
               </label>
-              <button class="del-btn" @click="draft.fields.splice(i,1)">✕</button>
+              <button class="del-btn" @click="draft.fields.splice(i,1)">x</button>
             </div>
             <!-- Args sub-section -->
             <div class="args-section">
@@ -75,7 +75,7 @@
                 <span class="arg-prefix">arg</span>
                 <input v-model="a.name" placeholder="argName" class="sm-input flex-1" />
                 <input v-model="a.type" placeholder="String" class="sm-input w100" />
-                <button class="del-btn" @click="f.args.splice(ai,1)">✕</button>
+                <button class="del-btn" @click="f.args.splice(ai,1)">x</button>
               </div>
               <button class="add-arg-btn" @click="addArg(f)">+ arg</button>
             </div>

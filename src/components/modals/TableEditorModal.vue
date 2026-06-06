@@ -29,10 +29,32 @@
           <div class="table-settings-row">
             <label class="table-setting">
               <input v-model="localTable.immutable" type="checkbox" />
-              <span>Immutable table</span>
+              <span>{{ isResource ? 'Immutable resource' : 'Immutable table' }}</span>
             </label>
           </div>
 
+          <template v-if="isResource">
+            <div class="resource-settings-grid">
+              <label class="field-block">
+                <span class="type-filter-label">Resource Type</span>
+                <select v-model="resourceType" class="col-input">
+                  <option v-for="option in RESOURCE_TYPES" :key="option.value" :value="option.value">
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
+              <label class="field-block">
+                <span class="type-filter-label">Connector Label</span>
+                <input v-model="resourcePortName" class="col-input" placeholder="request / response" />
+              </label>
+            </div>
+            <label class="field-block field-block-spaced">
+              <span class="type-filter-label">Notes</span>
+              <textarea v-model="localTable.comment" class="resource-textarea" placeholder="Describe what this component stores or serves." />
+            </label>
+          </template>
+
+          <template v-else>
           <div class="type-filter-row">
             <span class="type-filter-label">Database</span>
             <span class="type-filter-value">{{ activeDialectLabel }}</span>
@@ -53,10 +75,40 @@
             <span class="col-head" style="width:32px"></span>
           </div>
 
+          <div class="column-tools-row">
+            <button class="add-col-btn inline" @click="addColumn">+ Add Column</button>
+            <select
+              class="col-input column-preset-select"
+              :value="selectedColumnPreset"
+              @change="selectedColumnPreset = ($event.target as HTMLSelectElement).value; addColumnPreset()"
+            >
+              <option value="">Add Common Columns</option>
+              <option
+                v-for="preset in columnPresets"
+                :key="preset.id"
+                :value="preset.id"
+                :title="preset.description"
+              >{{ preset.label }}</option>
+            </select>
+          </div>
+
           <draggable-list :columns="localTable.columns" @update="localTable.columns = $event">
             <template #default="{ col, index }">
-              <div :key="col.id" class="column-editor-row">
-                <span class="drag-handle">::</span>
+              <div
+                :key="col.id"
+                class="column-editor-row"
+                :class="{
+                  'drag-source': draggingColumnId === col.id,
+                  'drop-target': dropBeforeColumnId === col.id,
+                }"
+                draggable="true"
+                @dragstart="onColumnDragStart($event, col.id)"
+                @dragenter.prevent="onColumnDragOver(col.id)"
+                @dragover.prevent="onColumnDragOver(col.id)"
+                @drop.prevent="onColumnDrop(col.id)"
+                @dragend="onColumnDragEnd"
+              >
+                <span class="drag-handle" title="Drag to reorder">::</span>
 
                 <input
                   v-model="col.name"
@@ -150,8 +202,7 @@
               </div>
             </template>
           </draggable-list>
-
-          <button class="add-col-btn" @click="addColumn">+ Add Column</button>
+          </template>
         </div>
 
         <div class="modal-footer">
@@ -246,7 +297,7 @@
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import { useSchemaStore } from '../../stores/schema'
-import type { Column, SQLDialect, Table } from '../../types'
+import type { Column, ResourceNodeType, SQLDialect, Table } from '../../types'
 import { SQL_TYPE_OPTIONS, getSqlTypeDescription, getSqlTypeGroups, normalizeSqlType } from '../../types/sqlTypes'
 
 const DraggableList = {
@@ -269,14 +320,39 @@ const TYPE_DIALECTS: { value: SQLDialect; label: string }[] = [
   { value: 'sqlite', label: 'SQLite' },
   { value: 'sqlserver', label: 'SQL Server' },
 ]
+const RESOURCE_TYPES: { label: string; value: ResourceNodeType }[] = [
+  { label: 'Blob Storage', value: 'blob-storage' },
+  { label: 'NoSQL Database', value: 'nosql-database' },
+  { label: 'Cache', value: 'cache' },
+  { label: 'Message Queue', value: 'message-queue' },
+  { label: 'External Service', value: 'external-service' },
+]
 
 type DefaultPreset = { label: string; value: string }
+type ColumnTemplate = {
+  name: string
+  type: string
+  nullable: boolean
+  primaryKey?: boolean
+  unique?: boolean
+  immutable?: boolean
+  defaultValue?: string
+  comment?: string
+}
+type ColumnPreset = {
+  id: string
+  label: string
+  description: string
+  columns: ColumnTemplate[]
+}
 
 const props = defineProps<{ table: Table }>()
 const emit = defineEmits<{ close: []; deleted: [] }>()
 const store = useSchemaStore()
 
 const localTable = reactive<Table>(JSON.parse(JSON.stringify(props.table)))
+localTable.kind ??= 'table'
+localTable.resourceType ??= localTable.kind === 'resource' ? 'external-service' : null
 localTable.immutable ??= false
 localTable.columns.forEach(column => {
   column.immutable ??= false
@@ -290,17 +366,66 @@ const openTypePickerFor = ref<string | null>(null)
 const typeSearch = ref('')
 const collapsedTypeGroups = ref<Record<string, boolean>>({})
 const defaultPresetByColumn = ref<Record<string, string>>({})
+const selectedColumnPreset = ref('')
+const draggingColumnId = ref<string | null>(null)
+const dropBeforeColumnId = ref<string | null>(null)
 const typePickerStyle = ref<Record<string, string>>({})
 const typeTriggerRefs = new Map<string, HTMLElement>()
 const typeSearchInput = ref<HTMLInputElement | null>(null)
 
 const schemaDialect = computed(() => store.schema.dialect ?? 'postgresql')
+const isResource = computed(() => (localTable.kind ?? 'table') === 'resource')
+const resourceType = computed({
+  get: () => localTable.resourceType ?? 'external-service',
+  set: (value: ResourceNodeType) => {
+    localTable.resourceType = value
+  },
+})
+const resourcePortName = computed({
+  get: () => localTable.columns[0]?.name ?? 'request',
+  set: (value: string) => {
+    if (!localTable.columns[0]) return
+    localTable.columns[0].name = value || 'request'
+  },
+})
 const activeTypePickerColumn = computed(() =>
   localTable.columns.find(column => column.id === openTypePickerFor.value) ?? null
 )
 const activeDialectLabel = computed(() =>
   TYPE_DIALECTS.find(dialect => dialect.value === schemaDialect.value)?.label ?? 'Database'
 )
+const columnPresets = computed<ColumnPreset[]>(() => {
+  const nowValue = defaultTimestampValue(schemaDialect.value)
+  return [
+    {
+      id: 'created_at',
+      label: 'created_at',
+      description: 'Created timestamp with a default now value',
+      columns: [{ name: 'created_at', type: defaultTimestampType(schemaDialect.value), nullable: false, defaultValue: nowValue, immutable: true }],
+    },
+    {
+      id: 'modified_at',
+      label: 'modified_at',
+      description: 'Modified timestamp with a default now value',
+      columns: [{ name: 'modified_at', type: defaultTimestampType(schemaDialect.value), nullable: false, defaultValue: defaultModifiedTimestampValue(schemaDialect.value), immutable: false }],
+    },
+    {
+      id: 'timestamps',
+      label: 'created_at + modified_at',
+      description: 'Common created/modified timestamp pair',
+      columns: [
+        { name: 'created_at', type: defaultTimestampType(schemaDialect.value), nullable: false, defaultValue: nowValue, immutable: true },
+        { name: 'modified_at', type: defaultTimestampType(schemaDialect.value), nullable: false, defaultValue: defaultModifiedTimestampValue(schemaDialect.value), immutable: false },
+      ],
+    },
+    {
+      id: 'deleted_at',
+      label: 'deleted_at',
+      description: 'Soft-delete timestamp column',
+      columns: [{ name: 'deleted_at', type: defaultTimestampType(schemaDialect.value), nullable: true, defaultValue: '', immutable: false }],
+    },
+  ]
+})
 const arrayElementOptions = computed(() =>
   SQL_TYPE_OPTIONS.filter(type =>
     !type.value.endsWith('[]') &&
@@ -428,6 +553,24 @@ function showArrayTypeSelector(type: string) {
   return type === 'ARRAY' || type.endsWith('[]')
 }
 
+function defaultTimestampType(dialect: SQLDialect): string {
+  if (dialect === 'postgresql') return 'TIMESTAMPTZ'
+  if (dialect === 'sqlserver') return 'DATETIME2'
+  if (dialect === 'sqlite') return 'DATETIME'
+  return 'DATETIME'
+}
+
+function defaultTimestampValue(dialect: SQLDialect): string {
+  if (dialect === 'postgresql') return 'NOW()'
+  if (dialect === 'sqlserver') return 'SYSDATETIME()'
+  return 'CURRENT_TIMESTAMP'
+}
+
+function defaultModifiedTimestampValue(dialect: SQLDialect): string {
+  if (dialect === 'mysql') return 'CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'
+  return defaultTimestampValue(dialect)
+}
+
 function getArrayElementType(type: string) {
   if (type.endsWith('[]')) return type.slice(0, -2)
   return 'TEXT'
@@ -531,6 +674,7 @@ function onDefaultPresetSelected(col: Column, value: string) {
 }
 
 function addColumn() {
+  if (isResource.value) return
   localTable.columns.push({
     id: uuidv4(),
     name: `column_${localTable.columns.length + 1}`,
@@ -545,21 +689,119 @@ function addColumn() {
   })
 }
 
+function uniqueColumnName(baseName: string) {
+  const existing = new Set(localTable.columns.map(column => column.name.toLowerCase()))
+  if (!existing.has(baseName.toLowerCase())) return baseName
+  let index = 2
+  let next = `${baseName}_${index}`
+  while (existing.has(next.toLowerCase())) {
+    index++
+    next = `${baseName}_${index}`
+  }
+  return next
+}
+
+function addColumnPreset() {
+  if (!selectedColumnPreset.value || isResource.value) return
+  const preset = columnPresets.value.find(candidate => candidate.id === selectedColumnPreset.value)
+  if (!preset) return
+
+  for (const template of preset.columns) {
+    localTable.columns.push({
+      id: uuidv4(),
+      name: uniqueColumnName(template.name),
+      type: normalizeSqlType(template.type, schemaDialect.value),
+      dialectTypes: { [schemaDialect.value]: normalizeSqlType(template.type, schemaDialect.value) },
+      nullable: template.nullable,
+      primaryKey: template.primaryKey ?? false,
+      unique: template.unique ?? false,
+      immutable: template.immutable ?? false,
+      defaultValue: template.defaultValue ?? '',
+      comment: template.comment ?? '',
+    })
+  }
+
+  selectedColumnPreset.value = ''
+}
+
+function onColumnDragStart(event: DragEvent, columnId: string) {
+  draggingColumnId.value = columnId
+  dropBeforeColumnId.value = null
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.dropEffect = 'move'
+    event.dataTransfer.setData('text/plain', columnId)
+  }
+}
+
+function onColumnDragOver(columnId: string) {
+  if (!draggingColumnId.value || draggingColumnId.value === columnId) return
+  dropBeforeColumnId.value = columnId
+}
+
+function onColumnDrop(columnId: string) {
+  if (!draggingColumnId.value || draggingColumnId.value === columnId) {
+    draggingColumnId.value = null
+    dropBeforeColumnId.value = null
+    return
+  }
+
+  const sourceIndex = localTable.columns.findIndex(column => column.id === draggingColumnId.value)
+  const targetIndex = localTable.columns.findIndex(column => column.id === columnId)
+  if (sourceIndex === -1 || targetIndex === -1) return
+
+  const [moved] = localTable.columns.splice(sourceIndex, 1)
+  const nextTargetIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex
+  localTable.columns.splice(nextTargetIndex, 0, moved)
+  draggingColumnId.value = null
+  dropBeforeColumnId.value = null
+}
+
+function onColumnDragEnd() {
+  draggingColumnId.value = null
+  dropBeforeColumnId.value = null
+}
+
 function removeColumn(index: number) {
+  if (isResource.value) return
   localTable.columns.splice(index, 1)
 }
 
 function save() {
   const dialect = schemaDialect.value
-  localTable.columns = localTable.columns.map(column => ({
-    ...column,
-    dialectTypes: {
-      ...(column.dialectTypes ?? {}),
-      [dialect]: column.type,
-    },
-  }))
+  localTable.columns = isResource.value
+    ? [{
+        ...(localTable.columns[0] ?? {
+          id: uuidv4(),
+          name: 'request',
+          type: 'RESOURCE',
+          dialectTypes: {},
+          nullable: true,
+          primaryKey: false,
+          unique: false,
+          immutable: true,
+          defaultValue: '',
+          comment: '',
+        }),
+        name: localTable.columns[0]?.name || 'request',
+        type: 'RESOURCE',
+        dialectTypes: {},
+        nullable: true,
+        primaryKey: false,
+        unique: false,
+        immutable: true,
+      }]
+    : localTable.columns.map(column => ({
+        ...column,
+        dialectTypes: {
+          ...(column.dialectTypes ?? {}),
+          [dialect]: column.type,
+        },
+      }))
 
   store.updateTable(localTable.id, {
+    kind: localTable.kind,
+    resourceType: localTable.resourceType,
     name: localTable.name,
     color: localTable.color,
     comment: localTable.comment,
@@ -676,6 +918,23 @@ function deleteTable() {
   margin-bottom: 12px;
 }
 
+.resource-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-block-spaced {
+  margin-bottom: 10px;
+}
+
 .table-setting {
   display: flex;
   align-items: center;
@@ -727,6 +986,13 @@ function deleteTable() {
   margin-bottom: 4px;
 }
 
+.column-tools-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
 .col-head.center {
   text-align: center;
 }
@@ -734,6 +1000,16 @@ function deleteTable() {
 .column-editor-row {
   padding: 5px 0;
   border-bottom: 1px solid #1a1a22;
+}
+
+.column-editor-row.drag-source {
+  opacity: 0.55;
+}
+
+.column-editor-row.drop-target {
+  background: #1d2321;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px #3ecf8e40;
 }
 
 .column-editor-row:hover {
@@ -748,6 +1024,7 @@ function deleteTable() {
   cursor: grab;
   font-size: 12px;
   width: 16px;
+  user-select: none;
 }
 
 .col-input {
@@ -763,6 +1040,23 @@ function deleteTable() {
 }
 
 .col-input:focus {
+  border-color: #3ecf8e40;
+}
+
+.resource-textarea {
+  min-height: 110px;
+  resize: vertical;
+  background: #1a1a22;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #d0d0d8;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  font-family: 'JetBrains Mono', monospace;
+  outline: none;
+}
+
+.resource-textarea:focus {
   border-color: #3ecf8e40;
 }
 
@@ -827,6 +1121,11 @@ function deleteTable() {
   flex-shrink: 0;
 }
 
+.column-preset-select {
+  width: 220px;
+  flex: 0 0 220px;
+}
+
 .del-col-btn {
   background: none;
   border: none;
@@ -852,6 +1151,12 @@ function deleteTable() {
   font-size: 12px;
   cursor: pointer;
   width: 100%;
+}
+
+.add-col-btn.inline {
+  margin-top: 0;
+  width: auto;
+  flex-shrink: 0;
 }
 
 .add-col-btn:hover {

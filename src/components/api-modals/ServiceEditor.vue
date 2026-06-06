@@ -3,7 +3,7 @@
     <div class="modal">
       <div class="modal-header">
         <span class="modal-title">Edit Service</span>
-        <button class="close-btn" @click="$emit('close')">✕</button>
+        <button class="close-btn" @click="$emit('close')">x</button>
       </div>
       <div class="modal-body">
         <div class="field-row">

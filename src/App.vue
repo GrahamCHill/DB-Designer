@@ -4,7 +4,7 @@
     <!-- ── Top workspace bar ── -->
     <div class="workspace-bar">
       <div class="ws-brand">
-        <span class="ws-icon">⬡</span>
+        <span class="ws-icon">DB</span>
         <span class="ws-name">Designer</span>
       </div>
       <div class="ws-tabs">
@@ -26,26 +26,26 @@
           class="ws-action-btn"
           title="Export diagram as PNG"
           @click="exportPng('png')"
-        >⤓ PNG</button>
+        >Save PNG</button>
         <button
           v-if="workspaceStore.active === 'db'"
           class="ws-action-btn"
           title="Export diagram as JPG"
           @click="exportPng('jpg')"
-        >⤓ JPG</button>
+        >Save JPG</button>
 
         <button
           v-if="workspaceStore.active === 'query'"
           class="ws-action-btn"
           title="Export query canvas as PNG"
           @click="exportPng('png')"
-        >⤓ PNG</button>
+        >Save PNG</button>
         <button
           v-if="workspaceStore.active === 'query'"
           class="ws-action-btn"
           title="Export query canvas as JPG"
           @click="exportPng('jpg')"
-        >⤓ JPG</button>
+        >Save JPG</button>
         <button
           v-if="workspaceStore.active === 'query'"
           class="ws-action-btn"
@@ -63,7 +63,7 @@
           class="ws-action-btn"
           title="Export SQL file"
           @click="exportQuerySQL"
-        >⤓ .sql Export</button>
+        >Save .sql</button>
         <button
           v-if="workspaceStore.active === 'codegen'"
           class="ws-action-btn"
@@ -75,7 +75,7 @@
           class="ws-action-btn"
           title="Download generated code"
           @click="downloadCodegenAll"
-        >⤓ Download</button>
+        >Save</button>
       </div>
     </div>
 
@@ -143,16 +143,17 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import html2canvas from 'html2canvas'
 
 import { useWorkspaceStore } from './stores/workspace'
 import type { Workspace } from './stores/workspace'
 const workspaceStore = useWorkspaceStore()
 
 const workspaces: { id: Workspace; label: string; icon: string }[] = [
-  { id: 'db', label: 'DB Schema', icon: '⬡' },
-  { id: 'api', label: 'API Designer', icon: '⇄' },
-  { id: 'query', label: 'Query Builder', icon: '⊞' },
-  { id: 'codegen', label: 'ERD to Code', icon: '⟨⟩' },
+  { id: 'db', label: 'DB Schema', icon: 'DB' },
+  { id: 'api', label: 'API Designer', icon: 'API' },
+  { id: 'query', label: 'Query Builder', icon: 'SQL' },
+  { id: 'codegen', label: 'ERD to Code', icon: 'GEN' },
 ]
 
 import { useApiStore } from './stores/api'
@@ -241,10 +242,6 @@ import { saveExportFile } from './composables/useFileExport'
 const queryStore = useQueryStore()
 
 async function exportPng(format: 'png' | 'jpg') {
-  await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js')
-  const h2c = (window as any).html2canvas
-  if (!h2c) { alert('Could not load html2canvas'); return }
-
   const isQuery = workspaceStore.active === 'query'
   const isApi = workspaceStore.active === 'api'
   const exportTheme: ExportTheme = !isQuery && !isApi && store.lightExportMode ? 'light' : 'dark'
@@ -302,7 +299,9 @@ async function exportPng(format: 'png' | 'jpg') {
     })
     store.schema.tables.forEach(t => {
       const w = t.width || 320
-      const h = TABLE_HEADER_H + TABLE_COL_PAD_TOP + (t.columns.length * TABLE_ROW_H) + 20
+      const h = (t.kind ?? 'table') === 'resource'
+        ? 140
+        : TABLE_HEADER_H + TABLE_COL_PAD_TOP + (t.columns.length * TABLE_ROW_H) + 20
       minX = Math.min(minX, t.position.x)
       minY = Math.min(minY, t.position.y)
       maxX = Math.max(maxX, t.position.x + w)
@@ -343,7 +342,7 @@ async function exportPng(format: 'png' | 'jpg') {
   const width = maxX - minX
   const height = maxY - minY
 
-  const canvas = await h2c(el, {
+  const canvas = await html2canvas(el, {
     backgroundColor: exportTheme === 'light' ? '#f8fafc' : '#0f0f12',
     scale: 8,
     useCORS: true,
@@ -431,17 +430,6 @@ async function exportPng(format: 'png' | 'jpg') {
     defaultPath: `${fileName}${themeSuffix}.${format}`,
     filters: [{ name: format.toUpperCase(), extensions: [format] }],
     mimeType,
-  })
-}
-
-function loadScript(src: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
-    const s = document.createElement('script')
-    s.src = src
-    s.onload = () => resolve()
-    s.onerror = reject
-    document.head.appendChild(s)
   })
 }
 </script>

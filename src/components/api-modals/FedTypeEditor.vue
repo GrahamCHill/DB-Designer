@@ -3,7 +3,7 @@
     <div class="modal">
       <div class="modal-header">
         <span class="modal-title">Edit Federation Type</span>
-        <button class="close-btn" @click="$emit('close')">✕</button>
+        <button class="close-btn" @click="$emit('close')">x</button>
       </div>
       <div class="modal-body">
         <div class="two-col">
@@ -52,7 +52,7 @@
           <div class="param-row">
             <input v-model="f.name" placeholder="fieldName" class="sm-input flex-1" />
             <input v-model="f.type" placeholder="String!" class="sm-input w120" />
-            <button class="del-btn" @click="draft.fields.splice(i,1)">✕</button>
+            <button class="del-btn" @click="draft.fields.splice(i,1)">x</button>
           </div>
           <div class="decorator-row">
             <label class="dec-check"><input type="checkbox" v-model="f.isKey" /> @key</label>

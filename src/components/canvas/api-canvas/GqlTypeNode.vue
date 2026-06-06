@@ -20,8 +20,8 @@
         <span class="kind-label">{{ kindLabel }}</span>
       </div>
       <div class="node-actions">
-        <button class="icon-btn" @click.stop="$emit('edit')">✎</button>
-        <button class="icon-btn danger" @click.stop="$emit('delete')">✕</button>
+        <button class="icon-btn" @click.stop="$emit('edit')">Edit</button>
+        <button class="icon-btn danger" @click.stop="$emit('delete')">Del</button>
       </div>
     </div>
 
@@ -121,10 +121,10 @@ function hexToRgb(hex: string): string {
 const kindColor = computed(() => GQL_KIND_COLORS[props.node.kind])
 
 const kindGlyph = computed(() => ({
-  'type': '⬡', 'input': '⬠', 'enum': '◈', 'interface': '◇',
-  'union': '⬡', 'scalar': '●',
+  'type': 'T', 'input': 'IN', 'enum': 'EN', 'interface': 'IF',
+  'union': 'UN', 'scalar': 'SC',
   'query-root': 'Q', 'mutation-root': 'M', 'subscription-root': 'S',
-}[props.node.kind] ?? '⬡'))
+}[props.node.kind] ?? 'T'))
 
 const kindLabel = computed(() => ({
   'type': 'type', 'input': 'input', 'enum': 'enum', 'interface': 'interface',

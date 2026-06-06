@@ -14,14 +14,14 @@
   >
     <!-- Header -->
     <div class="rest-type-header">
-      <div class="type-icon">⊞</div>
+      <div class="type-icon">DB</div>
       <div class="rest-type-title">
         <span class="rest-type-name">{{ node.name }}</span>
         <span class="rest-type-kind">type</span>
       </div>
       <div class="node-actions">
-        <button class="icon-btn" @click.stop="$emit('edit')">✎</button>
-        <button class="icon-btn danger" @click.stop="$emit('delete')">✕</button>
+        <button class="icon-btn" @click.stop="$emit('edit')">Edit</button>
+        <button class="icon-btn danger" @click.stop="$emit('delete')">Del</button>
       </div>
     </div>
 

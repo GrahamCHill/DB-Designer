@@ -23,8 +23,8 @@
         <span class="fed-svc">{{ serviceLabel }}</span>
       </div>
       <div class="node-actions">
-        <button class="icon-btn" @click.stop="$emit('edit')">✎</button>
-        <button class="icon-btn danger" @click.stop="$emit('delete')">✕</button>
+        <button class="icon-btn" @click.stop="$emit('edit')">Edit</button>
+        <button class="icon-btn danger" @click.stop="$emit('delete')">Del</button>
       </div>
     </div>
 

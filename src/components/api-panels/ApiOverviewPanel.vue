@@ -330,7 +330,7 @@ function tableCandidates(name: string) {
 }
 
 function findSchemaTableIdForRestNode(node: RestNode) {
-  const tables = schemaStore.schema.tables
+  const tables = schemaStore.sqlTables
   if (!tables.length) return null
 
   if (node.kind === 'type') {

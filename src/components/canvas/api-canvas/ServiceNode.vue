@@ -14,21 +14,21 @@
   >
     <!-- Drag header -->
     <div class="svc-header" @mousedown.stop="$emit('mousedown-header', $event)">
-      <div class="svc-hex">⬡</div>
+      <div class="svc-hex">API</div>
       <div class="svc-info">
         <span class="svc-name">{{ service.name }}</span>
         <span class="svc-url">{{ service.url }}</span>
       </div>
       <div class="svc-actions">
-        <button class="icon-btn" @click.stop="$emit('edit')">✎</button>
-        <button class="icon-btn danger" @click.stop="$emit('delete')">✕</button>
+        <button class="icon-btn" @click.stop="$emit('edit')">Edit</button>
+        <button class="icon-btn danger" @click.stop="$emit('delete')">Del</button>
       </div>
     </div>
 
     <!-- Subtle inner grid pattern -->
     <div class="svc-body">
       <div v-if="typeCount === 0" class="svc-empty">
-        <span class="svc-empty-icon">⬡</span>
+        <span class="svc-empty-icon">API</span>
         <span>Add types to this service</span>
       </div>
     </div>

@@ -3,7 +3,7 @@
     <div class="modal">
       <div class="modal-header">
         <span class="modal-title">Edit Endpoint</span>
-        <button class="close-btn" @click="$emit('close')">✕</button>
+        <button class="close-btn" @click="$emit('close')">x</button>
       </div>
       <div class="modal-body">
         <!-- Method + Path -->
@@ -45,7 +45,7 @@
           <input v-model="p.name" placeholder="name" class="sm-input flex-1" />
           <input v-model="p.type" placeholder="type" class="sm-input w80" />
           <label class="req-check"><input type="checkbox" v-model="p.required" /> req</label>
-          <button class="del-btn" @click="draft.params.splice(i,1)">✕</button>
+          <button class="del-btn" @click="draft.params.splice(i,1)">x</button>
         </div>
 
         <!-- Responses -->
@@ -56,7 +56,7 @@
         <div v-for="(r, i) in draft.responses" :key="r.id" class="param-row">
           <input v-model.number="r.statusCode" type="number" class="sm-input w60" placeholder="200" />
           <input v-model="r.description" placeholder="description" class="sm-input flex-1" />
-          <button class="del-btn" @click="draft.responses.splice(i,1)">✕</button>
+          <button class="del-btn" @click="draft.responses.splice(i,1)">x</button>
         </div>
       </div>
       <div class="modal-footer">

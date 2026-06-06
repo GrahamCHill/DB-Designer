@@ -1,4 +1,11 @@
 export type ColumnType = string
+export type TableKind = 'table' | 'resource'
+export type ResourceNodeType =
+  | 'blob-storage'
+  | 'nosql-database'
+  | 'cache'
+  | 'message-queue'
+  | 'external-service'
 
 export interface Column {
   id: string
@@ -15,6 +22,8 @@ export interface Column {
 
 export interface Table {
   id: string
+  kind?: TableKind
+  resourceType?: ResourceNodeType | null
   name: string
   comment: string
   columns: Column[]

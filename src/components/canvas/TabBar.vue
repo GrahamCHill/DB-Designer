@@ -9,7 +9,7 @@
         @click="tabsStore.switchTab(tab.id)"
         @dblclick="startRename(tab.id, tab.label)"
       >
-        <span class="tab-icon">⬡</span>
+        <span class="tab-icon">DB</span>
         <input
           v-if="renamingTabId === tab.id"
           class="tab-rename-input"
@@ -21,12 +21,12 @@
           @click.stop
         />
         <span v-else class="tab-label">{{ tab.label }}</span>
-        <span v-if="tab.isDirty" class="tab-dirty" title="Unsaved changes">●</span>
+        <span v-if="tab.isDirty" class="tab-dirty" title="Unsaved changes">*</span>
         <button
           class="tab-close"
           @click.stop="closeTab(tab.id)"
           title="Close tab"
-        >✕</button>
+        >x</button>
       </div>
     </div>
 
@@ -113,7 +113,9 @@ function closeTab(tabId: string) {
 }
 
 .tab-icon {
-  font-size: 11px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   color: #3ECF8E;
   opacity: 0.6;
   flex-shrink: 0;

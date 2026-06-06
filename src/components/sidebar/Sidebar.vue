@@ -2,7 +2,7 @@
   <aside class="sidebar">
     <!-- Brand -->
     <div class="brand">
-      <span class="brand-icon">⬡</span>
+      <span class="brand-icon">DB</span>
       <div class="brand-copy">
         <span class="brand-name">DB Designer</span>
       </div>
@@ -37,10 +37,10 @@
         </select>
       </div>
       <div class="btn-row three">
-        <button class="btn-ghost-sm" @click="newProject">⊕ New</button>
-        <button class="btn-ghost-sm" @click="store.saveToFile()">↓ Save</button>
+        <button class="btn-ghost-sm" @click="newProject">New</button>
+        <button class="btn-ghost-sm" @click="store.saveToFile()">Save</button>
         <label class="btn-ghost-sm">
-          ↑ Load
+          Load
           <input type="file" accept=".json" style="display:none" @change="loadFile" />
         </label>
       </div>
@@ -49,10 +49,13 @@
     <!-- Add -->
     <div class="sidebar-section">
       <button class="btn-primary" @click="addTable">
-        <span class="btn-icon">⊞</span> New Table
+        <span class="btn-icon">DB</span> New Table
+      </button>
+      <button class="btn-secondary-full" @click="addResource">
+        <span class="btn-icon">R</span> New Resource
       </button>
       <button class="btn-secondary-full" @click="addGroup">
-        <span class="btn-icon">▣</span> New Group
+        <span class="btn-icon">GRP</span> New Group
       </button>
     </div>
 
@@ -110,10 +113,10 @@
 
     <!-- Tables -->
     <div class="sidebar-section flex-grow">
-      <label class="section-label">Tables ({{ store.schema.tables.length }})</label>
+      <label class="section-label">Tables ({{ sqlTables.length }})</label>
       <div class="item-list scrollable">
         <div
-          v-for="table in store.schema.tables"
+          v-for="table in sqlTables"
           :key="table.id"
           class="list-item"
           :class="{
@@ -153,11 +156,29 @@
             :class="{ 'is-locked': table.groupLocked }"
             :title="table.groupLocked ? 'Group locked — click to unlock' : 'Click to lock group'"
             @click.stop="store.toggleTableLock(table.id)"
-          >{{ table.groupLocked ? '🔒' : '🔓' }}</button>
+          >{{ table.groupLocked ? 'LOCK' : 'UNLK' }}</button>
 
           <span class="item-count">{{ table.columns.length }}</span>
         </div>
-        <div v-if="store.schema.tables.length === 0" class="list-empty">No tables yet</div>
+        <div v-if="sqlTables.length === 0" class="list-empty">No tables yet</div>
+      </div>
+    </div>
+
+    <div v-if="resourceTables.length > 0" class="sidebar-section">
+      <label class="section-label">Resources ({{ resourceTables.length }})</label>
+      <div class="item-list">
+        <div
+          v-for="resource in resourceTables"
+          :key="resource.id"
+          class="list-item"
+          :class="{ active: store.selectedTableId === resource.id }"
+          @click="store.selectedTableId = resource.id; store.selectedGroupId = null"
+          @dblclick="store.editingTableId = resource.id"
+        >
+          <span class="item-dot" :style="{ background: resource.color }" />
+          <span class="item-name">{{ resource.name }}</span>
+          <span class="item-group-tag">{{ formatResourceType(resource.resourceType) }}</span>
+        </div>
       </div>
     </div>
 
@@ -191,7 +212,7 @@
           @click="store.toggleTableLock(store.selectedTableId!)"
           :title="store.selectedTable.groupLocked ? 'Locked — click to unlock' : 'Click to lock'"
         >
-          {{ store.selectedTable.groupLocked ? '🔒 Locked' : '🔓 Unlocked' }}
+          {{ store.selectedTable.groupLocked ? 'Locked' : 'Unlocked' }}
         </span>
       </label>
       <select
@@ -206,8 +227,8 @@
       </select>
 
       <div class="inspector-actions">
-        <button class="btn-ghost-action" @click="store.editingTableId = store.selectedTableId">✎ Edit</button>
-        <button class="btn-ghost-action danger" @click="confirmDeleteTable">✕ Delete</button>
+        <button class="btn-ghost-action" @click="store.editingTableId = store.selectedTableId">Edit</button>
+        <button class="btn-ghost-action danger" @click="confirmDeleteTable">Delete</button>
       </div>
     </div>
 
@@ -228,8 +249,8 @@
         </div>
       </div>
       <div class="inspector-actions">
-        <button class="btn-ghost-action" @click="store.editingGroupId = store.selectedGroupId">✎ Edit</button>
-        <button class="btn-ghost-action danger" @click="confirmDeleteGroup">✕ Delete</button>
+        <button class="btn-ghost-action" @click="store.editingGroupId = store.selectedGroupId">Edit</button>
+        <button class="btn-ghost-action danger" @click="confirmDeleteGroup">Delete</button>
       </div>
     </div>
 
@@ -239,7 +260,7 @@
       <div v-if="selectedRelation" class="relation-display">
         <span class="rel-table">{{ targetTable?.name }}</span>
         <span class="rel-col">.{{ targetCol?.name }}</span>
-        <span class="rel-arrow">→</span>
+        <span class="rel-arrow">-></span>
         <span class="rel-table">{{ sourceTable?.name }}</span>
         <span class="rel-col">.{{ sourceCol?.name }}</span>
       </div>
@@ -251,13 +272,13 @@
 
     <!-- Export + Connect -->
     <div class="sidebar-section">
-      <button class="btn-export" @click="showExport = true">↑ Export SQL</button>
-      <button class="btn-connect" @click="openDBConnect" style="margin-top:6px">⚡ Connect to DB</button>
+      <button class="btn-export" @click="showExport = true">Export SQL</button>
+      <button class="btn-connect" @click="openDBConnect" style="margin-top:6px">Connect to DB</button>
     </div>
 
     <!-- Footer -->
     <div class="sidebar-footer">
-      <span class="autosave-indicator">● auto-saved</span>
+      <span class="autosave-indicator">auto-saved</span>
       <span class="sidebar-version">{{ appVersionLabel }}</span>
     </div>
 
@@ -290,6 +311,8 @@ const schemaDialect = computed({
   get: () => store.schema.dialect,
   set: (value: SQLDialect) => store.setSchemaDialect(value),
 })
+const sqlTables = computed(() => store.sqlTables)
+const resourceTables = computed(() => store.resourceTables)
 
 // ── Drag state ────────────────────────────────────────────────────────────────
 
@@ -359,8 +382,13 @@ const pendingGroupColor = computed(() => {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function addTable() {
-  const n = store.schema.tables.length
+  const n = sqlTables.value.length
   store.createTable({ x: 80 + (n % 5) * 40, y: 80 + (n % 5) * 40 })
+}
+
+function addResource() {
+  const n = resourceTables.value.length
+  store.createResource('external-service', { x: 90 + (n % 5) * 40, y: 90 + (n % 5) * 40 })
 }
 
 function addGroup() {
@@ -388,6 +416,10 @@ function groupName(groupId: string) {
 
 function groupColor(groupId: string) {
   return store.schema.groups.find(g => g.id === groupId)?.color ?? '#888'
+}
+
+function formatResourceType(value: string | null | undefined) {
+  return (value ?? 'external-service').replace(/-/g, ' ')
 }
 
 const pkCount = computed(() => store.selectedTable?.columns.filter(c => c.primaryKey).length ?? 0)
@@ -463,7 +495,7 @@ function loadFile(e: Event) {
 
 /* Brand */
 .brand { display: flex; align-items: flex-start; gap: 8px; padding: 14px 14px 12px; border-bottom: 1px solid #1c1c24; }
-.brand-icon    { font-size: 18px; color: #3ECF8E; margin-top: 1px; }
+.brand-icon    { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: #3ECF8E; margin-top: 3px; }
 .brand-copy    { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .brand-name    { font-size: 13px; font-weight: 700; color: #f0f0f0; letter-spacing: 0.04em; }
 .brand-help { position: relative; }
@@ -646,7 +678,7 @@ function loadFile(e: Event) {
 /* Lock button */
 .lock-btn {
   background: none; border: none;
-  font-size: 11px; cursor: pointer;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em; cursor: pointer;
   opacity: 0; padding: 1px 3px; border-radius: 3px;
   transition: opacity 0.15s, background 0.15s;
   flex-shrink: 0; line-height: 1;

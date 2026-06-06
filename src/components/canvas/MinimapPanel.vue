@@ -83,6 +83,7 @@ const CANVAS_W = 6000
 const CANVAS_H = 6000
 
 function tableHeight(table: Table) {
+  if ((table.kind ?? 'table') === 'resource') return 140
   return TABLE_HEADER_H + TABLE_COL_PAD_TOP + table.columns.length * TABLE_ROW_H + 29
 }
 

@@ -19,10 +19,10 @@
       @mousedown.stop="$emit('mousedown-header', $event)"
       @dblclick.stop="$emit('edit')"
     >
-      <span class="group-icon">{{ depth > 0 ? '▤' : '▣' }}</span>
+      <span class="group-icon">{{ depth > 0 ? 'SUB' : 'GRP' }}</span>
       <span class="group-name">{{ group.name }}</span>
       <span v-if="depth > 0" class="nest-badge" title="Nested group">{{ depth }}</span>
-      <button class="group-edit-btn" @click.stop="$emit('edit')" title="Edit group">✎</button>
+      <button class="group-edit-btn" @click.stop="$emit('edit')" title="Edit group">Edit</button>
     </div>
 
     <!-- Resize handle -->
@@ -30,7 +30,7 @@
       class="resize-handle"
       @mousedown.stop="$emit('mousedown-resize', $event)"
       title="Drag to resize"
-    >⌟</div>
+    >::</div>
   </div>
 </template>
 
@@ -98,7 +98,9 @@ function hexToRgb(hex: string): string {
 .group-header:active { cursor: grabbing; }
 
 .group-icon {
-  font-size: 12px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  font-weight: 700;
   color: var(--group-color);
   opacity: 0.8;
   flex-shrink: 0;
@@ -136,7 +138,7 @@ function hexToRgb(hex: string): string {
   color: var(--group-color);
   opacity: 0;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 10px;
   padding: 2px 4px;
   border-radius: 4px;
   pointer-events: all;
@@ -149,7 +151,7 @@ function hexToRgb(hex: string): string {
 .resize-handle {
   position: absolute;
   bottom: 4px; right: 6px;
-  font-size: 14px;
+  font-size: 12px;
   color: var(--group-color);
   opacity: 0.35;
   cursor: se-resize;

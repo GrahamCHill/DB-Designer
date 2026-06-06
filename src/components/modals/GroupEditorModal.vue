@@ -4,7 +4,7 @@
       <div class="modal">
         <div class="modal-header">
           <span class="modal-title">Edit Group</span>
-          <button class="close-btn" @click="$emit('close')">✕</button>
+          <button class="close-btn" @click="$emit('close')">x</button>
         </div>
 
         <div class="modal-body">
@@ -37,7 +37,7 @@
             <div v-for="t in groupTables" :key="t.id" class="group-table-row">
               <span class="dot" :style="{ background: t.color }" />
               <span class="tname">{{ t.name }}</span>
-              <button class="remove-btn" @click="store.assignTableToGroup(t.id, null)" title="Remove from group">✕</button>
+              <button class="remove-btn" @click="store.assignTableToGroup(t.id, null)" title="Remove from group">x</button>
             </div>
           </div>
         </div>

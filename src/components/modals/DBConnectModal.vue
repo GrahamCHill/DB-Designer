@@ -4,13 +4,13 @@
       <div class="modal">
         <div class="modal-header">
           <div class="header-left">
-            <span class="modal-icon">⬡</span>
+            <span class="modal-icon">DB</span>
             <div>
               <div class="modal-title">Connect to Database</div>
               <div class="modal-sub">Import schema from a live database</div>
             </div>
           </div>
-          <button class="close-btn" @click="$emit('close')">✕</button>
+          <button class="close-btn" @click="$emit('close')">x</button>
         </div>
 
         <div class="modal-body">
@@ -86,12 +86,12 @@
         <div class="modal-footer">
           <button class="btn-test" @click="testConnection" :disabled="loading">
             <span v-if="loading" class="spinner">⟳</span>
-            {{ loading ? 'Connecting…' : '⚡ Test Connection' }}
+            {{ loading ? 'Connecting…' : 'Test Connection' }}
           </button>
           <div class="footer-right">
             <button class="btn-cancel" @click="$emit('close')">Cancel</button>
             <button class="btn-import" @click="importSchema" :disabled="loading || !connected">
-              ↓ Import Schema
+              Import Schema
             </button>
           </div>
         </div>

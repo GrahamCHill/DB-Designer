@@ -21,13 +21,13 @@
     <!-- Header -->
     <div class="table-header" :style="{ borderColor: table.color }">
       <div class="header-left">
-        <span class="table-icon" :style="{ color: table.color }">⬡</span>
+        <span class="table-icon" :style="{ color: table.color }">DB</span>
         <span class="table-name">{{ table.name }}</span>
       </div>
       <div class="header-actions">
-        <button v-if="!readOnly" class="icon-btn" @click.stop="$emit('edit')"   title="Edit table">✎</button>
-        <button v-if="!readOnly" class="icon-btn danger" @click.stop="$emit('delete')" title="Delete table">✕</button>
-        <button v-if="readOnly" class="icon-btn primary" @click.stop="$emit('generate-api', table)" title="Generate API for this table">⇄</button>
+        <button v-if="!readOnly" class="icon-btn" @click.stop="$emit('edit')"   title="Edit table">Edit</button>
+        <button v-if="!readOnly" class="icon-btn danger" @click.stop="$emit('delete')" title="Delete table">Del</button>
+        <button v-if="readOnly" class="icon-btn primary" @click.stop="$emit('generate-api', table)" title="Generate API for this table">API</button>
       </div>
     </div>
 
@@ -92,7 +92,7 @@
       class="resize-handle"
       title="Drag to resize"
       @mousedown.stop="$emit('resize-start', $event)"
-    >⌟</div>
+    >::</div>
   </div>
 </template>
 
@@ -169,7 +169,7 @@ function hexToRgb(hex: string): string {
   border-radius: 9px 9px 0 0;
 }
 .header-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.table-icon  { font-size: 14px; line-height: 1; flex-shrink: 0; }
+.table-icon  { font-size: 10px; line-height: 1; flex-shrink: 0; font-weight: 700; letter-spacing: 0.08em; }
 .table-name  {
   font-size: 13px; font-weight: 700; color: #f0f0f0;
   letter-spacing: 0.02em;
@@ -182,7 +182,7 @@ function hexToRgb(hex: string): string {
 
 .icon-btn {
   background: none; border: none; color: #666; cursor: pointer;
-  font-size: 13px; width: 22px; height: 22px; border-radius: 4px;
+  font-size: 9px; min-width: 32px; height: 22px; padding: 0 6px; border-radius: 4px;
   display: flex; align-items: center; justify-content: center;
   transition: color 0.15s, background 0.15s;
 }
@@ -286,7 +286,7 @@ function hexToRgb(hex: string): string {
 .resize-handle {
   position: absolute;
   bottom: 3px; right: 5px;
-  font-size: 13px;
+  font-size: 12px;
   color: #3a3a50;
   cursor: se-resize;
   line-height: 1;
