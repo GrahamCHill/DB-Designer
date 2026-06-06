@@ -5,6 +5,7 @@ export type ResourceNodeType =
   | 'nosql-database'
   | 'cache'
   | 'message-queue'
+  | 'data-export'
   | 'external-service'
 
 export interface Column {

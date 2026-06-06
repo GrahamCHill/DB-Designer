@@ -84,13 +84,52 @@
             </div>
           </div>
           <div class="table-list">
-            <label v-for="t in activeTables" :key="t.name" class="tbl-row">
-              <input type="checkbox" :checked="selectedTables.has(t.name)" @change="toggleTable(t.name)" />
+            <label v-for="t in activeTables" :key="t.id" class="tbl-row">
+              <input type="checkbox" :checked="selectedTables.has(t.id)" @change="toggleTable(t.id)" />
               <span class="tbl-dot" :style="{ background: t.color }"/>
               <span class="tbl-name">{{ t.name }}</span>
               <span class="tbl-cnt">{{ t.columns.length }}c</span>
             </label>
             <div v-if="!activeTables.length" class="tbl-empty">Load a schema first</div>
+          </div>
+        </div>
+
+        <div v-if="exportResources.length" class="cg-section">
+          <div class="cg-label">Data Export</div>
+          <select v-model="selectedExportResourceId" class="export-select">
+            <option value="">No export resource selected</option>
+            <option v-for="resource in exportResources" :key="resource.id" :value="resource.id">
+              {{ resource.name }}
+            </option>
+          </select>
+
+          <div v-if="selectedExportResource" class="export-config">
+            <div class="export-hint">Connected tables found by walking backward through incoming relations.</div>
+            <div class="export-table-list">
+              <div v-for="table in exportCandidateTables" :key="table.id" class="export-table-card">
+                <label class="tbl-row export-row">
+                  <input
+                    type="checkbox"
+                    :checked="selectedExportTableIds.has(table.id)"
+                    @change="toggleExportTable(table.id)"
+                  />
+                  <span class="tbl-dot" :style="{ background: table.color }"/>
+                  <span class="tbl-name">{{ table.name }}</span>
+                  <span class="tbl-cnt">{{ selectedExportColumnCount(table.id) }}/{{ table.columns.length }}</span>
+                </label>
+                <div v-if="selectedExportTableIds.has(table.id)" class="export-columns">
+                  <label v-for="column in table.columns" :key="column.id" class="export-col-row">
+                    <input
+                      type="checkbox"
+                      :checked="isExportColumnSelected(table.id, column.id)"
+                      @change="toggleExportColumn(table.id, column.id)"
+                    />
+                    <span>{{ column.name }}</span>
+                    <span class="export-col-type">{{ column.type }}</span>
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         <div class="cg-footer">
@@ -124,6 +163,7 @@
 import { ref, computed, reactive, watch } from 'vue'
 import { saveExportFile } from '../../composables/useFileExport'
 import { useSchemaStore }    from '../../stores/schema'
+import type { Relation, ResourceNodeType, Schema, Table } from '../../types'
 
 const dbStore = useSchemaStore()
 const appVersion = (import.meta.env.VITE_APP_VERSION || '').trim()
@@ -146,11 +186,73 @@ const activeLangLabel = computed(() => languages.find(l => l.id === activeLang.v
 const tsOpts = reactive({ interfaces: true, classes: false, optionalNulls: true, zodSchemas: false })
 const goOpts = reactive({ jsonTags: true, dbTags: true, pointer: true, pkg: 'models' })
 const pyOpts = reactive({ dataclass: false, pydantic: true, sqlalchemy: false, optionalNulls: true })
-interface SchemaColumn { name: string; type: string; nullable: boolean; primaryKey: boolean; unique: boolean }
-interface SchemaTable  { name: string; color: string; columns: SchemaColumn[] }
+interface SchemaColumn {
+  id: string
+  name: string
+  type: string
+  nullable: boolean
+  primaryKey: boolean
+  unique: boolean
+}
+interface SchemaTable  {
+  id: string
+  name: string
+  color: string
+  columns: SchemaColumn[]
+}
+interface SchemaResource {
+  id: string
+  name: string
+  color: string
+  resourceType: ResourceNodeType | null
+}
+interface SchemaModel {
+  name: string
+  tables: SchemaTable[]
+  resources: SchemaResource[]
+  relations: Relation[]
+}
 
-const externalSchema = ref<SchemaTable[] | null>(null)
+const externalSchema = ref<SchemaModel | null>(null)
 const schemaName     = ref('')
+
+function normalizeTable(table: Table): SchemaTable {
+  return {
+    id: table.id,
+    name: table.name,
+    color: table.color,
+    columns: table.columns.map(c => ({
+      id: c.id,
+      name: c.name,
+      type: c.type ?? 'text',
+      nullable: c.nullable ?? true,
+      primaryKey: c.primaryKey ?? false,
+      unique: c.unique ?? false,
+    })),
+  }
+}
+
+function normalizeResource(table: Table): SchemaResource {
+  return {
+    id: table.id,
+    name: table.name,
+    color: table.color ?? '#22C55E',
+    resourceType: table.resourceType ?? 'external-service',
+  }
+}
+
+function schemaToModel(schema: Schema): SchemaModel {
+  return {
+    name: schema.name ?? 'Schema',
+    tables: (schema.tables ?? [])
+      .filter(table => (table.kind ?? 'table') === 'table')
+      .map(normalizeTable),
+    resources: (schema.tables ?? [])
+      .filter(table => (table.kind ?? 'table') === 'resource')
+      .map(normalizeResource),
+    relations: (schema.relations ?? []).map(relation => ({ ...relation })),
+  }
+}
 
 function useCurrentSchema() {
   externalSchema.value = null
@@ -165,51 +267,134 @@ function loadSchema(e: Event) {
     try {
       const raw  = JSON.parse(ev.target?.result as string)
       const schema = raw.tables ? raw : raw.schema ?? raw
-      externalSchema.value = (schema.tables ?? []).map((t: any) => ({
-        name: t.name, color: t.color ?? '#3ECF8E',
-        columns: (t.columns ?? []).map((c: any) => ({
-          name: c.name, type: c.type ?? 'text',
-          nullable: c.nullable ?? true, primaryKey: c.primaryKey ?? false, unique: c.unique ?? false,
-        })),
-      }))
+      externalSchema.value = schemaToModel(schema as Schema)
       schemaName.value = schema.name ?? file.name
     } catch { alert('Could not parse schema file') }
   }
   reader.readAsText(file)
 }
 
-const activeTables = computed<SchemaTable[]>(() => {
-  if (externalSchema.value) return externalSchema.value
-  return dbStore.schema.tables.map(t => ({
-    name: t.name, color: t.color,
-    columns: t.columns.map(c => ({
-      name: c.name, type: c.type, nullable: c.nullable, primaryKey: c.primaryKey, unique: c.unique,
-    })),
-  }))
-})
+const schemaModel = computed<SchemaModel>(() =>
+  externalSchema.value ?? schemaToModel(dbStore.schema)
+)
+const activeTables = computed<SchemaTable[]>(() => schemaModel.value.tables)
+const exportResources = computed(() =>
+  schemaModel.value.resources.filter(resource => resource.resourceType === 'data-export')
+)
+const selectedExportResourceId = ref('')
 const selectedTables = ref<Set<string>>(new Set())
+const selectedExportTableIds = ref<Set<string>>(new Set())
+const selectedExportColumnIds = ref<Record<string, Set<string>>>({})
 
 watch(activeTables, (tables) => {
-  selectedTables.value = new Set(tables.map(t => t.name))
+  selectedTables.value = new Set(tables.map(t => t.id))
 }, { immediate: true })
 
-function toggleTable(name: string) {
+watch(exportResources, (resources) => {
+  if (!resources.some(resource => resource.id === selectedExportResourceId.value)) {
+    selectedExportResourceId.value = resources[0]?.id ?? ''
+  }
+}, { immediate: true })
+
+const selectedExportResource = computed(() =>
+  exportResources.value.find(resource => resource.id === selectedExportResourceId.value) ?? null
+)
+
+const exportCandidateTables = computed(() => {
+  const resource = selectedExportResource.value
+  if (!resource) return []
+
+  const tableById = new Map(activeTables.value.map(table => [table.id, table]))
+  const visited = new Set<string>()
+  const queue = schemaModel.value.relations
+    .filter(relation => relation.targetTableId === resource.id)
+    .map(relation => relation.sourceTableId)
+    .filter(tableId => tableById.has(tableId))
+  const ordered: SchemaTable[] = []
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!
+    if (visited.has(currentId)) continue
+    visited.add(currentId)
+    const table = tableById.get(currentId)
+    if (!table) continue
+    ordered.push(table)
+    for (const relation of schemaModel.value.relations) {
+      if (relation.targetTableId === currentId && tableById.has(relation.sourceTableId)) {
+        queue.push(relation.sourceTableId)
+      }
+    }
+  }
+
+  return ordered
+})
+
+watch(exportCandidateTables, (tables) => {
+  const nextTableIds = new Set(tables.map(table => table.id))
+  selectedExportTableIds.value = nextTableIds
+  selectedExportColumnIds.value = Object.fromEntries(
+    tables.map(table => [table.id, new Set(table.columns.map(column => column.id))]),
+  )
+}, { immediate: true })
+
+function toggleTable(tableId: string) {
   const s = new Set(selectedTables.value)
-  s.has(name) ? s.delete(name) : s.add(name)
+  s.has(tableId) ? s.delete(tableId) : s.add(tableId)
   selectedTables.value = s
 }
-function selectAll()  { selectedTables.value = new Set(activeTables.value.map(t => t.name)) }
+function selectAll()  { selectedTables.value = new Set(activeTables.value.map(t => t.id)) }
 function selectNone() { selectedTables.value = new Set() }
 
 const filteredTables = computed(() =>
-  activeTables.value.filter(t => selectedTables.value.has(t.name))
+  activeTables.value.filter(t => selectedTables.value.has(t.id))
 )
-const previewTabs = computed(() => filteredTables.value.map(t => t.name))
+const exportPreviewTab = computed(() =>
+  selectedExportResource.value ? `export:${selectedExportResource.value.name}` : ''
+)
+const previewTabs = computed(() => {
+  const tabs = filteredTables.value.map(t => t.name)
+  if (exportPreviewTab.value) tabs.push(exportPreviewTab.value)
+  return tabs
+})
 const previewTab  = ref('')
 
 watch(previewTabs, (tabs) => {
   if (!tabs.includes(previewTab.value)) previewTab.value = tabs[0] ?? ''
 }, { immediate: true })
+
+function toggleExportTable(tableId: string) {
+  const next = new Set(selectedExportTableIds.value)
+  if (next.has(tableId)) next.delete(tableId)
+  else next.add(tableId)
+  selectedExportTableIds.value = next
+}
+
+function isExportColumnSelected(tableId: string, columnId: string) {
+  return selectedExportColumnIds.value[tableId]?.has(columnId) ?? false
+}
+
+function toggleExportColumn(tableId: string, columnId: string) {
+  const next = { ...selectedExportColumnIds.value }
+  const current = new Set(next[tableId] ?? [])
+  if (current.has(columnId)) current.delete(columnId)
+  else current.add(columnId)
+  next[tableId] = current
+  selectedExportColumnIds.value = next
+}
+
+function selectedExportColumnCount(tableId: string) {
+  return selectedExportColumnIds.value[tableId]?.size ?? 0
+}
+
+const selectedExportTables = computed(() =>
+  exportCandidateTables.value
+    .filter(table => selectedExportTableIds.value.has(table.id))
+    .map(table => ({
+      ...table,
+      columns: table.columns.filter(column => isExportColumnSelected(table.id, column.id)),
+    }))
+    .filter(table => table.columns.length > 0)
+)
 function tsType(col: SchemaColumn): string {
   const t = (col.type ?? '').toLowerCase()
   let base =
@@ -573,9 +758,207 @@ function genCpp(tables: SchemaTable[]): string {
   }
   return chunks.join('\n')
 }
+function exportFunctionName(name: string) {
+  return `build${toPascal(name)}Export`
+}
+
+function exportPayloadName(name: string) {
+  return `${toPascal(name)}ExportPayload`
+}
+
+function exportTableVar(table: SchemaTable) {
+  return toCamel(table.name)
+}
+
+function selectedColumnNames(table: SchemaTable) {
+  return table.columns.map(column => column.name)
+}
+
+function genTypeScriptExport(resourceName: string, tables: SchemaTable[]): string {
+  const fnName = exportFunctionName(resourceName)
+  const payloadName = exportPayloadName(resourceName)
+  const lines: string[] = []
+  lines.push(`export interface ${payloadName} {`)
+  for (const table of tables) {
+    lines.push(`  ${exportTableVar(table)}: Array<{`)
+    for (const column of table.columns) {
+      lines.push(`    ${column.name}: ${tsType(column)}`)
+    }
+    lines.push('  }>')
+  }
+  lines.push('}\n')
+  lines.push(`export function ${fnName}(rowsByTable: Record<string, Array<Record<string, unknown>>>): ${payloadName} {`)
+  lines.push('  return {')
+  for (const table of tables) {
+    const fields = table.columns.map(column => `${column.name}: row.${column.name} as ${tsType(column)}`).join(', ')
+    lines.push(`    ${exportTableVar(table)}: (rowsByTable['${table.name}'] ?? []).map(row => ({ ${fields} })),`)
+  }
+  lines.push('  }')
+  lines.push('}')
+  return lines.join('\n')
+}
+
+function genGoExport(resourceName: string, tables: SchemaTable[]): string {
+  const payloadName = exportPayloadName(resourceName)
+  const fnName = exportFunctionName(resourceName)
+  const lines: string[] = []
+  lines.push(`type ${payloadName} struct {`)
+  for (const table of tables) {
+    lines.push(`\t${toPascal(exportTableVar(table))} []map[string]any \`json:"${exportTableVar(table)}"\``)
+  }
+  lines.push('}\n')
+  lines.push(`func ${fnName}(rowsByTable map[string][]map[string]any) ${payloadName} {`)
+  lines.push(`\treturn ${payloadName}{`)
+  for (const table of tables) {
+    lines.push(`\t\t${toPascal(exportTableVar(table))}: pickRows(rowsByTable["${table.name}"], []string{${selectedColumnNames(table).map(name => `"${name}"`).join(', ')}}),`)
+  }
+  lines.push('\t}')
+  lines.push('}\n')
+  lines.push('func pickRows(rows []map[string]any, columns []string) []map[string]any {')
+  lines.push('\tresult := make([]map[string]any, 0, len(rows))')
+  lines.push('\tfor _, row := range rows {')
+  lines.push('\t\tentry := map[string]any{}')
+  lines.push('\t\tfor _, column := range columns {')
+  lines.push('\t\t\tentry[column] = row[column]')
+  lines.push('\t\t}')
+  lines.push('\t\tresult = append(result, entry)')
+  lines.push('\t}')
+  lines.push('\treturn result')
+  lines.push('}')
+  return lines.join('\n')
+}
+
+function genPythonExport(resourceName: string, tables: SchemaTable[]): string {
+  const fnName = exportFunctionName(resourceName)
+  const lines: string[] = []
+  lines.push(`def ${toSnake(fnName)}(rows_by_table: dict[str, list[dict]]) -> dict:`)
+  lines.push('    return {')
+  for (const table of tables) {
+    lines.push(`        "${exportTableVar(table)}": [{${selectedColumnNames(table).map(name => `"${name}": row.get("${name}")`).join(', ')}} for row in rows_by_table.get("${table.name}", [])],`)
+  }
+  lines.push('    }')
+  return lines.join('\n')
+}
+
+function genRustExport(resourceName: string, tables: SchemaTable[]): string {
+  const fnName = exportFunctionName(resourceName)
+  const lines: string[] = []
+  lines.push('use serde_json::{Map, Value};\n')
+  lines.push(`pub fn ${toSnake(fnName)}(rows_by_table: &std::collections::HashMap<String, Vec<Map<String, Value>>>) -> Map<String, Value> {`)
+  lines.push('\tlet mut payload = Map::new();')
+  for (const table of tables) {
+    lines.push(`\tpayload.insert("${exportTableVar(table)}".into(), Value::Array(`)
+    lines.push(`\t\trows_by_table.get("${table.name}").cloned().unwrap_or_default().into_iter().map(|row| {`)
+    lines.push('\t\t\tlet mut picked = Map::new();')
+    for (const column of table.columns) {
+      lines.push(`\t\t\tif let Some(value) = row.get("${column.name}") { picked.insert("${column.name}".into(), value.clone()); }`)
+    }
+    lines.push('\t\t\tValue::Object(picked)')
+    lines.push('\t\t}).collect()')
+    lines.push('\t));')
+  }
+  lines.push('\tpayload')
+  lines.push('}')
+  return lines.join('\n')
+}
+
+function genJavaExport(resourceName: string, tables: SchemaTable[]): string {
+  const fnName = exportFunctionName(resourceName)
+  const lines: string[] = []
+  lines.push(`public static Map<String, Object> ${fnName}(Map<String, List<Map<String, Object>>> rowsByTable) {`)
+  lines.push('    Map<String, Object> payload = new LinkedHashMap<>();')
+  for (const table of tables) {
+    lines.push(`    payload.put("${exportTableVar(table)}", rowsByTable.getOrDefault("${table.name}", List.of()).stream().map(row -> {`)
+    lines.push('        Map<String, Object> picked = new LinkedHashMap<>();')
+    for (const column of table.columns) {
+      lines.push(`        picked.put("${column.name}", row.get("${column.name}"));`)
+    }
+    lines.push('        return picked;')
+    lines.push('    }).toList());')
+  }
+  lines.push('    return payload;')
+  lines.push('}')
+  return lines.join('\n')
+}
+
+function genKotlinExport(resourceName: string, tables: SchemaTable[]): string {
+  const fnName = exportFunctionName(resourceName)
+  const lines: string[] = []
+  lines.push(`fun ${toCamel(fnName)}(rowsByTable: Map<String, List<Map<String, Any?>>>) : Map<String, Any?> {`)
+  lines.push('    return linkedMapOf(')
+  for (const table of tables) {
+    lines.push(`        "${exportTableVar(table)}" to (rowsByTable["${table.name}"] ?: emptyList()).map { row -> linkedMapOf(`)
+    lines.push(`            ${selectedColumnNames(table).map(name => `"${name}" to row["${name}"]`).join(', ')}`)
+    lines.push('        ) },')
+  }
+  lines.push('    )')
+  lines.push('}')
+  return lines.join('\n')
+}
+
+function genCSharpExport(resourceName: string, tables: SchemaTable[]): string {
+  const fnName = exportFunctionName(resourceName)
+  const lines: string[] = []
+  lines.push(`public static Dictionary<string, object> ${fnName}(Dictionary<string, List<Dictionary<string, object?>>> rowsByTable)`)
+  lines.push('{')
+  lines.push('    return new Dictionary<string, object>')
+  lines.push('    {')
+  for (const table of tables) {
+    lines.push(`        ["${exportTableVar(table)}"] = rowsByTable.GetValueOrDefault("${table.name}", new List<Dictionary<string, object?>>()).Select(row => new Dictionary<string, object?>`)
+    lines.push('        {')
+    for (const column of table.columns) {
+      lines.push(`            ["${column.name}"] = row.GetValueOrDefault("${column.name}"),`)
+    }
+    lines.push('        }).ToList(),')
+  }
+  lines.push('    };')
+  lines.push('}')
+  return lines.join('\n')
+}
+
+function genCppExport(resourceName: string, tables: SchemaTable[]): string {
+  const fnName = exportFunctionName(resourceName)
+  const lines: string[] = []
+  lines.push(`std::map<std::string, std::vector<std::map<std::string, std::string>>> ${fnName}(`)
+  lines.push('  const std::map<std::string, std::vector<std::map<std::string, std::string>>>& rowsByTable')
+  lines.push(') {')
+  lines.push('  std::map<std::string, std::vector<std::map<std::string, std::string>>> payload;')
+  for (const table of tables) {
+    lines.push(`  for (const auto& row : rowsByTable.count("${table.name}") ? rowsByTable.at("${table.name}") : std::vector<std::map<std::string, std::string>>{}) {`)
+    lines.push('    std::map<std::string, std::string> picked;')
+    for (const column of table.columns) {
+      lines.push(`    if (row.count("${column.name}")) picked["${column.name}"] = row.at("${column.name}");`)
+    }
+    lines.push(`    payload["${exportTableVar(table)}"].push_back(picked);`)
+    lines.push('  }')
+  }
+  lines.push('  return payload;')
+  lines.push('}')
+  return lines.join('\n')
+}
+
+function genExportFunction(resourceName: string, tables: SchemaTable[]): string {
+  if (tables.length === 0) return '// Select at least one connected table/column for this export resource.'
+  switch (activeLang.value) {
+    case 'typescript': return genTypeScriptExport(resourceName, tables)
+    case 'go': return genGoExport(resourceName, tables)
+    case 'rust': return genRustExport(resourceName, tables)
+    case 'python': return genPythonExport(resourceName, tables)
+    case 'java': return genJavaExport(resourceName, tables)
+    case 'kotlin': return genKotlinExport(resourceName, tables)
+    case 'csharp': return genCSharpExport(resourceName, tables)
+    case 'cpp': return genCppExport(resourceName, tables)
+  }
+}
 function toPascal(s: string) { return s.replace(/(^|_|-)(\w)/g, (_, __, c) => c.toUpperCase()) }
 function toCamel(s: string)  { const p = toPascal(s); return p[0].toLowerCase() + p.slice(1) }
+function toSnake(s: string)  { return s.replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/[\s-]+/g, '_').toLowerCase() }
 function getCode(tableName: string): string {
+  if (tableName.startsWith('export:')) {
+    return selectedExportResource.value
+      ? genExportFunction(selectedExportResource.value.name, selectedExportTables.value)
+      : '// No export resource selected.'
+  }
   const tables = filteredTables.value.filter(t => t.name === tableName)
   if (!tables.length) return '-- select a table'
   switch (activeLang.value) {
@@ -593,7 +976,8 @@ function getCode(tableName: string): string {
 const currentCode = computed(() => getCode(previewTab.value))
 
 function getAllCode(): string {
-  switch (activeLang.value) {
+  const modelCode = (() => {
+    switch (activeLang.value) {
     case 'typescript': return genTypeScript(filteredTables.value)
     case 'go':         return genGo(filteredTables.value)
     case 'rust':       return genRust(filteredTables.value)
@@ -602,7 +986,11 @@ function getAllCode(): string {
     case 'kotlin':     return genKotlin(filteredTables.value)
     case 'csharp':     return genCSharp(filteredTables.value)
     case 'cpp':        return genCpp(filteredTables.value)
-  }
+    }
+  })()
+  if (!selectedExportResource.value) return modelCode
+  const exportCode = genExportFunction(selectedExportResource.value.name, selectedExportTables.value)
+  return `${modelCode}\n\n${exportCode}`.trim()
 }
 const copied = ref(false)
 async function copyAll() {
@@ -715,6 +1103,78 @@ defineExpose({ copyAll, downloadAll })
 .tbl-name { flex: 1; font-size: 11.5px; color: #b0b0c8; }
 .tbl-cnt  { font-size: 9.5px; color: #38384e; }
 .tbl-empty { font-size: 11px; color: #2a2a3a; font-style: italic; text-align: center; padding: 16px; }
+
+.export-select {
+  width: 100%;
+  background: #18181f;
+  border: 1px solid #252535;
+  border-radius: 6px;
+  color: #b0b0c8;
+  font-size: 11px;
+  padding: 7px 9px;
+  font-family: 'JetBrains Mono', monospace;
+  outline: none;
+}
+
+.export-config {
+  margin-top: 10px;
+}
+
+.export-hint {
+  font-size: 10px;
+  color: #6b7280;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.export-table-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.export-table-card {
+  border: 1px solid #1f2430;
+  border-radius: 8px;
+  background: #11151c;
+  overflow: hidden;
+}
+
+.export-row {
+  margin: 0;
+}
+
+.export-columns {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 8px 8px;
+}
+
+.export-col-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  color: #aeb8c7;
+  padding: 4px 6px;
+  border-radius: 5px;
+}
+
+.export-col-row:hover {
+  background: #181e28;
+}
+
+.export-col-row input {
+  accent-color: #3ECF8E;
+}
+
+.export-col-type {
+  margin-left: auto;
+  color: #5b6575;
+}
 
 .cg-footer {
   display: flex;

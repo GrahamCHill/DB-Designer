@@ -419,7 +419,10 @@ function groupColor(groupId: string) {
 }
 
 function formatResourceType(value: string | null | undefined) {
-  return (value ?? 'external-service').replace(/-/g, ' ')
+  const normalized = value ?? 'external-service'
+  if (normalized === 'blob-storage') return 's3 / blob'
+  if (normalized === 'data-export') return 'data export'
+  return normalized.replace(/-/g, ' ')
 }
 
 const pkCount = computed(() => store.selectedTable?.columns.filter(c => c.primaryKey).length ?? 0)

@@ -27,13 +27,15 @@ const RESOURCE_COLORS: Record<ResourceNodeType, string> = {
   'nosql-database': '#F59E0B',
   'cache': '#8B5CF6',
   'message-queue': '#EC4899',
+  'data-export': '#22C55E',
   'external-service': '#14B8A6',
 }
 const RESOURCE_LABELS: Record<ResourceNodeType, string> = {
-  'blob-storage': 'blob_storage',
+  'blob-storage': 's3_blob',
   'nosql-database': 'nosql_store',
   'cache': 'cache',
   'message-queue': 'queue',
+  'data-export': 'data_export',
   'external-service': 'external_service',
 }
 

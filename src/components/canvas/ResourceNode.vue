@@ -70,10 +70,11 @@ defineEmits<{
 
 const resourceLabel = computed(() => {
   switch (props.table.resourceType) {
-    case 'blob-storage': return 'Blob Storage'
+    case 'blob-storage': return 'S3 / Blob'
     case 'nosql-database': return 'NoSQL Database'
     case 'cache': return 'Cache'
     case 'message-queue': return 'Message Queue'
+    case 'data-export': return 'Data Export'
     default: return 'External Service'
   }
 })
@@ -81,10 +82,11 @@ const resourceLabel = computed(() => {
 const portId = computed(() => props.table.columns[0]?.id ?? '')
 const portLabel = computed(() => {
   switch (props.table.resourceType) {
-    case 'blob-storage': return 'blob read/write'
+    case 'blob-storage': return 's3/blob read/write'
     case 'nosql-database': return 'document request'
     case 'cache': return 'cache lookup'
     case 'message-queue': return 'publish / consume'
+    case 'data-export': return 'export payload'
     default: return 'request / response'
   }
 })

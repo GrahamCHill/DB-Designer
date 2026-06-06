@@ -321,10 +321,11 @@ const TYPE_DIALECTS: { value: SQLDialect; label: string }[] = [
   { value: 'sqlserver', label: 'SQL Server' },
 ]
 const RESOURCE_TYPES: { label: string; value: ResourceNodeType }[] = [
-  { label: 'Blob Storage', value: 'blob-storage' },
+  { label: 'S3 / Blob', value: 'blob-storage' },
   { label: 'NoSQL Database', value: 'nosql-database' },
   { label: 'Cache', value: 'cache' },
   { label: 'Message Queue', value: 'message-queue' },
+  { label: 'Data Export', value: 'data-export' },
   { label: 'External Service', value: 'external-service' },
 ]
 

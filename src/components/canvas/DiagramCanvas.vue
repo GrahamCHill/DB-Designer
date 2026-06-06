@@ -139,13 +139,17 @@
       v-if="contextMenu"
       class="canvas-context-menu"
       :style="{ left: `${contextMenu.x}px`, top: `${contextMenu.y}px` }"
+      @mousedown.stop
+      @click.stop
+      @contextmenu.prevent.stop
     >
       <button class="context-menu-item" @click="createAtContext('table')">New Table</button>
       <button class="context-menu-item" @click="createAtContext('group')">New Group</button>
-      <button class="context-menu-item" @click="createAtContext('blob-storage')">Blob Storage</button>
+      <button class="context-menu-item" @click="createAtContext('blob-storage')">S3 / Blob</button>
       <button class="context-menu-item" @click="createAtContext('nosql-database')">NoSQL Database</button>
       <button class="context-menu-item" @click="createAtContext('cache')">Cache</button>
       <button class="context-menu-item" @click="createAtContext('message-queue')">Message Queue</button>
+      <button class="context-menu-item" @click="createAtContext('data-export')">Data Export</button>
       <button class="context-menu-item" @click="createAtContext('external-service')">External Service</button>
     </div>
 
@@ -536,13 +540,31 @@ const relationValidationById = computed(() => {
     const targetTable = store.schema.tables.find(t => t.id === rel.targetTableId)
     const sourceCol = sourceTable?.columns.find(c => c.id === rel.sourceColumnId)
     const targetCol = targetTable?.columns.find(c => c.id === rel.targetColumnId)
+    const sourceIsResource = (sourceTable?.kind ?? 'table') === 'resource'
+    const targetIsResource = (targetTable?.kind ?? 'table') === 'resource'
     const isResourceRelation =
-      (sourceTable?.kind ?? 'table') === 'resource' ||
-      (targetTable?.kind ?? 'table') === 'resource'
+      sourceIsResource || targetIsResource
     const messages: string[] = []
 
     if (!sourceCol) messages.push('Referenced column no longer exists.')
     if (!targetCol) messages.push('Foreign key column no longer exists.')
+
+    const invalidExternalServiceInput = !!(
+      sourceTable?.resourceType === 'external-service' &&
+      !targetIsResource &&
+      targetCol &&
+      (
+        (!targetCol.primaryKey && !targetCol.unique) ||
+        (targetCol.primaryKey && !isQueryLikeResourceInput(sourceCol?.name))
+      )
+    )
+    if (invalidExternalServiceInput) {
+      if (targetCol?.primaryKey) {
+        messages.push('External services may only target a PRIMARY KEY when the connector is labeled as search, request, query, lookup, or fetch.')
+      } else {
+        messages.push('External services should target UNIQUE keys, or a PRIMARY KEY with a search/request/query-style connector.')
+      }
+    }
 
     const typeMismatch = !!(
       !isResourceRelation &&
@@ -575,7 +597,7 @@ const relationValidationById = computed(() => {
     map.set(rel.id, {
       hasError: messages.length > 0,
       typeMismatch,
-      invalidTarget,
+      invalidTarget: invalidTarget || invalidExternalServiceInput,
       circular,
       messages,
     })
@@ -674,6 +696,11 @@ const highlightedTableIds = computed(() => {
   if (!rel) return new Set<string>()
   return new Set([rel.sourceTableId, rel.targetTableId])
 })
+
+function isQueryLikeResourceInput(label: string | undefined) {
+  if (!label) return false
+  return /(search|request|query|lookup|get|fetch|find)/i.test(label)
+}
 
 const editingGroupData = computed(() =>
   store.schema.groups.find(g => g.id === store.editingGroupId) ?? null
@@ -998,6 +1025,28 @@ function startRelation(tableId: string, columnId: string) {
 
 function endRelation(tableId: string, columnId: string) {
   if (drawingRel.value && drawingRel.value.fromTableId !== tableId) {
+    const sourceTable = store.schema.tables.find(t => t.id === drawingRel.value!.fromTableId)
+    const sourceCol = sourceTable?.columns.find(c => c.id === drawingRel.value!.fromColumnId)
+    const targetTable = store.schema.tables.find(t => t.id === tableId)
+    const targetCol = targetTable?.columns.find(c => c.id === columnId)
+    const invalidExternalServiceInput = !!(
+      sourceTable?.resourceType === 'external-service' &&
+      (targetTable?.kind ?? 'table') === 'table' &&
+      targetCol &&
+      (
+        (!targetCol.primaryKey && !targetCol.unique) ||
+        (targetCol.primaryKey && !isQueryLikeResourceInput(sourceCol?.name))
+      )
+    )
+    if (invalidExternalServiceInput) {
+      alert(
+        targetCol?.primaryKey
+          ? 'External services may only connect to a PRIMARY KEY when the connector label is query-like, such as search, request, lookup, or fetch.'
+          : 'External services may only connect to UNIQUE keys, or to a PRIMARY KEY when the connector label is query-like.'
+      )
+      drawingRel.value = null
+      return
+    }
     store.addRelation({
       sourceTableId: drawingRel.value.fromTableId,
       sourceColumnId: drawingRel.value.fromColumnId,
