@@ -134,7 +134,7 @@
     <TableEditorModal
       v-if="store.editingTableId && editingTable"
       :table="editingTable"
-      @close="store.editingTableId = null"
+      @close="closeTableEditor"
     />
     <DBConnectModal v-if="showDBConnect" @close="showDBConnect = false" />
 
@@ -235,6 +235,12 @@ const showDBConnect = ref(false)
 const editingTable = computed(() => store.schema.tables.find(t => t.id === store.editingTableId) ?? null)
 const codegenPanel = ref<CodegenPanelExposed | null>(null)
 ;(window as any).__dbDesignerShowConnect = () => { showDBConnect.value = true }
+
+function closeTableEditor() {
+  const tableId = store.editingTableId
+  if (!tableId) return
+  store.discardDraftTable(tableId)
+}
 
 // ── PNG / JPG export ──────────────────────────────────────────────────────────
 import { useQueryStore } from './stores/query'

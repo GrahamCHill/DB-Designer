@@ -180,7 +180,7 @@
     <GroupEditorModal
       v-if="store.editingGroupId && editingGroupData"
       :group="editingGroupData"
-      @close="store.editingGroupId = null"
+      @close="closeGroupEditor"
     />
   </div>
 </template>
@@ -705,6 +705,12 @@ function isQueryLikeResourceInput(label: string | undefined) {
 const editingGroupData = computed(() =>
   store.schema.groups.find(g => g.id === store.editingGroupId) ?? null
 )
+
+function closeGroupEditor() {
+  const groupId = store.editingGroupId
+  if (!groupId) return
+  store.discardDraftGroup(groupId)
+}
 
 // â”€â”€ Canvas mouse down â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

@@ -126,6 +126,8 @@ export const useSchemaStore = defineStore('schema', () => {
   const selectedGroupId    = ref<string | null>(null)
   const editingTableId     = ref<string | null>(null)
   const editingGroupId     = ref<string | null>(null)
+  const draftTableIds      = ref<Set<string>>(new Set())
+  const draftGroupIds      = ref<Set<string>>(new Set())
   const showMinimap        = ref(true)
   const lightExportMode    = ref(false)
 
@@ -169,6 +171,7 @@ export const useSchemaStore = defineStore('schema', () => {
       }],
     }
     s.tables.push(table)
+    draftTableIds.value = new Set([...draftTableIds.value, table.id])
     selectedTableId.value = table.id
     editingTableId.value  = table.id
     persist()
@@ -207,6 +210,7 @@ export const useSchemaStore = defineStore('schema', () => {
       }],
     }
     s.tables.push(resource)
+    draftTableIds.value = new Set([...draftTableIds.value, resource.id])
     selectedTableId.value = resource.id
     editingTableId.value = resource.id
     persist()
@@ -236,6 +240,11 @@ export const useSchemaStore = defineStore('schema', () => {
       } else {
         t.columns = t.columns.map(column => withDialectMemory(column, sc().dialect ?? 'postgresql'))
       }
+      if (draftTableIds.value.has(tableId)) {
+        const next = new Set(draftTableIds.value)
+        next.delete(tableId)
+        draftTableIds.value = next
+      }
       persist()
     }
   }
@@ -244,6 +253,11 @@ export const useSchemaStore = defineStore('schema', () => {
     const s = sc()
     s.tables    = s.tables.filter(t => t.id !== tableId)
     s.relations = s.relations.filter(r => r.sourceTableId !== tableId && r.targetTableId !== tableId)
+    if (draftTableIds.value.has(tableId)) {
+      const next = new Set(draftTableIds.value)
+      next.delete(tableId)
+      draftTableIds.value = next
+    }
     if (selectedTableId.value === tableId) selectedTableId.value = null
     if (editingTableId.value  === tableId) editingTableId.value  = null
     persist()
@@ -338,6 +352,7 @@ export const useSchemaStore = defineStore('schema', () => {
       parentGroupId: null,
     }
     s.groups.push(group)
+    draftGroupIds.value = new Set([...draftGroupIds.value, group.id])
     selectedGroupId.value = group.id
     editingGroupId.value  = group.id
     persist()
@@ -346,7 +361,15 @@ export const useSchemaStore = defineStore('schema', () => {
 
   function updateGroup(groupId: string, updates: Partial<TableGroup>) {
     const g = sc().groups.find(g => g.id === groupId)
-    if (g) { Object.assign(g, updates); persist() }
+    if (g) {
+      Object.assign(g, updates)
+      if (draftGroupIds.value.has(groupId)) {
+        const next = new Set(draftGroupIds.value)
+        next.delete(groupId)
+        draftGroupIds.value = next
+      }
+      persist()
+    }
   }
 
   function deleteGroup(groupId: string, removeTables = false) {
@@ -357,6 +380,11 @@ export const useSchemaStore = defineStore('schema', () => {
       if (g.parentGroupId === groupId) g.parentGroupId = thisGroup?.parentGroupId ?? null
     }
     s.groups = s.groups.filter(g => g.id !== groupId)
+    if (draftGroupIds.value.has(groupId)) {
+      const next = new Set(draftGroupIds.value)
+      next.delete(groupId)
+      draftGroupIds.value = next
+    }
     if (removeTables) {
       const tableIds = s.tables.filter(t => t.groupId === groupId).map(t => t.id)
       s.tables    = s.tables.filter(t => t.groupId !== groupId)
@@ -626,6 +654,24 @@ export const useSchemaStore = defineStore('schema', () => {
 
   function newSchema() { tabsStore.newTab(); clearSelection() }
 
+  function isDraftTable(tableId: string) {
+    return draftTableIds.value.has(tableId)
+  }
+
+  function isDraftGroup(groupId: string) {
+    return draftGroupIds.value.has(groupId)
+  }
+
+  function discardDraftTable(tableId: string) {
+    if (isDraftTable(tableId)) deleteTable(tableId)
+    else if (editingTableId.value === tableId) editingTableId.value = null
+  }
+
+  function discardDraftGroup(groupId: string) {
+    if (isDraftGroup(groupId)) deleteGroup(groupId, false)
+    else if (editingGroupId.value === groupId) editingGroupId.value = null
+  }
+
   return {
     schema,
     selectedTableId, selectedRelationId, selectedGroupId, editingTableId, editingGroupId,
@@ -641,6 +687,7 @@ export const useSchemaStore = defineStore('schema', () => {
     updateGroupSize, commitGroupSize,
     assignTableToGroup, toggleTableLock,
     updateSchemaMeta, setSchemaDialect,
+    isDraftTable, isDraftGroup, discardDraftTable, discardDraftGroup,
     exportSQL, saveToFile, loadFromJSON, newSchema,
   }
 })
