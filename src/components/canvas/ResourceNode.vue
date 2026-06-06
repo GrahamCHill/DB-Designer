@@ -10,7 +10,7 @@
       '--resource-color-rgb': hexToRgb(table.color),
     }"
     @mousedown.stop="$emit('mousedown', $event)"
-    @click.stop="$emit('select')"
+    @click.stop="$emit('select', $event)"
   >
     <div class="resource-header">
       <div class="resource-copy">
@@ -61,7 +61,7 @@ const props = defineProps<{
 
 defineEmits<{
   mousedown: [e: MouseEvent]
-  select: []
+  select: [e: MouseEvent]
   edit: []
   delete: []
   'start-relation': [columnId: string]

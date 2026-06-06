@@ -16,10 +16,10 @@
         :key="group.id"
         :group="group"
         :depth="groupDepth(group.id)"
-        :selected="store.selectedGroupId === group.id"
+        :selected="store.selectedGroupId === group.id || store.multiSelectedGroupIds.has(group.id)"
         @mousedown-header="startGroupDrag(group.id, $event)"
         @mousedown-resize="startGroupResize(group.id, $event)"
-        @select="selectGroup(group.id)"
+        @select="selectGroup(group.id, $event)"
         @edit="store.editingGroupId = group.id"
       />
 
@@ -91,8 +91,8 @@
         v-for="table in sqlTables"
         :key="table.id"
         :table="table"
-        :selected="store.selectedTableId === table.id"
-        :highlighted="highlightedTableIds.has(table.id) && store.selectedTableId !== table.id"
+        :selected="store.selectedTableId === table.id || store.multiSelectedTableIds.has(table.id)"
+        :highlighted="highlightedTableIds.has(table.id) && store.selectedTableId !== table.id && !store.multiSelectedTableIds.has(table.id)"
         :drawing-rel="!!drawingRel"
         :connected-as-source="sourceColsByTable.get(table.id) ?? emptySet"
         :connected-as-target="targetColsByTable.get(table.id) ?? emptySet"
@@ -101,7 +101,7 @@
         :column-issues="columnIssuesByTable.get(table.id) ?? emptyIssues"
         :read-only="props.readOnly && !props.interactive"
         @mousedown.stop="!props.readOnly && startTableDrag(table.id, $event)"
-        @select="selectTable(table.id)"
+        @select="selectTable(table.id, $event)"
         @start-relation="!props.readOnly && startRelation(table.id, $event)"
         @end-relation="!props.readOnly && endRelation(table.id, $event)"
         @edit="!props.readOnly && (store.editingTableId = table.id)"
@@ -114,13 +114,13 @@
         v-for="resource in resourceTables"
         :key="resource.id"
         :table="resource"
-        :selected="store.selectedTableId === resource.id"
-        :highlighted="highlightedTableIds.has(resource.id) && store.selectedTableId !== resource.id"
+        :selected="store.selectedTableId === resource.id || store.multiSelectedTableIds.has(resource.id)"
+        :highlighted="highlightedTableIds.has(resource.id) && store.selectedTableId !== resource.id && !store.multiSelectedTableIds.has(resource.id)"
         :connected-as-source="sourceColsByTable.get(resource.id) ?? emptySet"
         :connected-as-target="targetColsByTable.get(resource.id) ?? emptySet"
         :read-only="props.readOnly && !props.interactive"
         @mousedown.stop="!props.readOnly && startTableDrag(resource.id, $event)"
-        @select="selectTable(resource.id)"
+        @select="selectTable(resource.id, $event)"
         @start-relation="!props.readOnly && startRelation(resource.id, $event)"
         @end-relation="!props.readOnly && endRelation(resource.id, $event)"
         @edit="!props.readOnly && (store.editingTableId = resource.id)"
@@ -151,6 +151,7 @@
       <button class="context-menu-item" @click="createAtContext('message-queue')">Message Queue</button>
       <button class="context-menu-item" @click="createAtContext('data-export')">Data Export</button>
       <button class="context-menu-item" @click="createAtContext('external-service')">External Service</button>
+      <button v-if="store.hasCopiedCanvasItems()" class="context-menu-item" @click="pasteAtContext">Paste</button>
     </div>
 
     <!-- Relation type bar (appears when a relation is selected) -->
@@ -217,22 +218,141 @@ defineEmits<{
   'generate-api': [table: any]
 }>()
 
+type CanvasShortcutWindow = Window & {
+  __dbDesignerCanvasKeyHandler?: (e: KeyboardEvent) => void
+}
+
+const onKeyDown = (e: KeyboardEvent) => {
+  const tag = (e.target as HTMLElement).tagName.toLowerCase()
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+  if (e.repeat && (e.ctrlKey || e.metaKey)) {
+    const repeatedKey = e.key.toLowerCase()
+    if (repeatedKey === 'a' || repeatedKey === 'c' || repeatedKey === 'v') {
+      e.preventDefault()
+      return
+    }
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+    store.selectAllCanvas()
+    e.preventDefault()
+    return
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+    store.copySelectedCanvasItems()
+    e.preventDefault()
+    return
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+    store.pasteCopiedCanvasItems()
+    e.preventDefault()
+    return
+  }
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    const selectedTableIds = store.multiSelectedTableIds.size > 0
+      ? [...store.multiSelectedTableIds]
+      : store.selectedTableId
+        ? [store.selectedTableId]
+        : []
+    const selectedGroupIds = store.multiSelectedGroupIds.size > 0
+      ? [...store.multiSelectedGroupIds]
+      : store.selectedGroupId
+        ? [store.selectedGroupId]
+        : []
+
+    if (selectedTableIds.length > 0) {
+      const message = selectedTableIds.length === 1
+        ? `Delete "${store.schema.tables.find(table => table.id === selectedTableIds[0])?.name ?? 'selected item'}"?`
+        : `Delete ${selectedTableIds.length} selected table/resource item(s)?`
+      if (confirm(message)) {
+        for (const tableId of selectedTableIds) store.deleteTable(tableId)
+        store.clearMultiSelection()
+      }
+      e.preventDefault()
+    } else if (selectedGroupIds.length > 0) {
+      const message = selectedGroupIds.length === 1
+        ? `Delete group "${store.schema.groups.find(group => group.id === selectedGroupIds[0])?.name ?? 'selected group'}"?`
+        : `Delete ${selectedGroupIds.length} selected group(s)?`
+      if (confirm(message)) {
+        for (const groupId of selectedGroupIds) store.deleteGroup(groupId, false)
+        store.clearMultiSelection()
+      }
+      e.preventDefault()
+    } else if (store.selectedRelationId) {
+      if (confirm('Delete selected relation?')) {
+        store.deleteRelation(store.selectedRelationId)
+      }
+      e.preventDefault()
+    }
+  }
+}
+
 onMounted(() => {
-  // Delete key removes selected table or relation
-  const onKeyDown = (e: KeyboardEvent) => {
+  // Delete key removes selected table or relation; standard shortcuts work on the canvas selection.
+  const legacyOnKeyDown = (e: KeyboardEvent) => {
     const tag = (e.target as HTMLElement).tagName.toLowerCase()
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+      store.selectAllCanvas()
+      e.preventDefault()
+      return
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+      store.copySelectedCanvasItems()
+      e.preventDefault()
+      return
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+      store.pasteCopiedCanvasItems()
+      e.preventDefault()
+      return
+    }
     if (e.key === 'Delete' || e.key === 'Backspace') {
-      if (store.selectedTableId) {
-        store.deleteTable(store.selectedTableId)
+      const selectedTableIds = store.multiSelectedTableIds.size > 0
+        ? [...store.multiSelectedTableIds]
+        : store.selectedTableId
+          ? [store.selectedTableId]
+          : []
+      const selectedGroupIds = store.multiSelectedGroupIds.size > 0
+        ? [...store.multiSelectedGroupIds]
+        : store.selectedGroupId
+          ? [store.selectedGroupId]
+          : []
+
+      if (selectedTableIds.length > 0) {
+        const message = selectedTableIds.length === 1
+          ? `Delete "${store.schema.tables.find(table => table.id === selectedTableIds[0])?.name ?? 'selected item'}"?`
+          : `Delete ${selectedTableIds.length} selected table/resource item(s)?`
+        if (confirm(message)) {
+          for (const tableId of selectedTableIds) store.deleteTable(tableId)
+          store.clearMultiSelection()
+        }
+        e.preventDefault()
+      } else if (selectedGroupIds.length > 0) {
+        const message = selectedGroupIds.length === 1
+          ? `Delete group "${store.schema.groups.find(group => group.id === selectedGroupIds[0])?.name ?? 'selected group'}"?`
+          : `Delete ${selectedGroupIds.length} selected group(s)?`
+        if (confirm(message)) {
+          for (const groupId of selectedGroupIds) store.deleteGroup(groupId, false)
+          store.clearMultiSelection()
+        }
         e.preventDefault()
       } else if (store.selectedRelationId) {
-        store.deleteRelation(store.selectedRelationId)
+        if (confirm('Delete selected relation?')) {
+          store.deleteRelation(store.selectedRelationId)
+        }
         e.preventDefault()
       }
     }
   }
-  window.addEventListener('keydown', onKeyDown)
+  void legacyOnKeyDown
+  if (!props.readOnly) {
+    const canvasWindow = window as CanvasShortcutWindow
+    if (canvasWindow.__dbDesignerCanvasKeyHandler) {
+      window.removeEventListener('keydown', canvasWindow.__dbDesignerCanvasKeyHandler)
+    }
+    canvasWindow.__dbDesignerCanvasKeyHandler = onKeyDown
+    window.addEventListener('keydown', onKeyDown)
+  }
   window.addEventListener('mouseup', onWindowMouseUp, true)
   window.addEventListener('blur', onWindowBlur)
   // Clean up on unmount would need onUnmounted â€” skipping for now as canvas lives for app lifetime
@@ -249,6 +369,13 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (!props.readOnly) {
+    const canvasWindow = window as CanvasShortcutWindow
+    if (canvasWindow.__dbDesignerCanvasKeyHandler === onKeyDown) {
+      window.removeEventListener('keydown', onKeyDown)
+      delete canvasWindow.__dbDesignerCanvasKeyHandler
+    }
+  }
   window.removeEventListener('mouseup', onWindowMouseUp, true)
   window.removeEventListener('blur', onWindowBlur)
 })
@@ -727,6 +854,7 @@ function onCanvasMouseDown(e: MouseEvent) {
     store.selectedTableId    = null
     store.selectedRelationId = null
     store.selectedGroupId    = null
+    store.clearMultiSelection()
     drag.value = { kind: 'pan', startClientX: e.clientX, startClientY: e.clientY }
   }
 }
@@ -811,6 +939,12 @@ function createAtContext(kind: 'table' | 'group' | ResourceNodeType) {
   if (kind === 'table') store.createTable(position)
   else if (kind === 'group') store.createGroup(position)
   else store.createResource(kind, position)
+  contextMenu.value = null
+}
+
+function pasteAtContext() {
+  if (!contextMenu.value) return
+  store.pasteCopiedCanvasItems()
   contextMenu.value = null
 }
 
@@ -908,7 +1042,12 @@ function startTableResize(tableId: string, e: MouseEvent) {
   }
 }
 
-function selectTable(id: string) {
+function selectTable(id: string, event?: MouseEvent) {
+  if (event && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+    store.toggleTableSelection(id)
+    return
+  }
+  store.clearMultiSelection()
   store.selectedTableId    = id
   store.selectedRelationId = null
   store.selectedGroupId    = null
@@ -959,7 +1098,12 @@ function startGroupDrag(groupId: string, e: MouseEvent) {
   }
 }
 
-function selectGroup(id: string) {
+function selectGroup(id: string, event?: MouseEvent) {
+  if (event && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+    store.toggleGroupSelection(id)
+    return
+  }
+  store.clearMultiSelection()
   store.selectedGroupId    = id
   store.selectedTableId    = null
   store.selectedRelationId = null
@@ -1066,6 +1210,7 @@ function endRelation(tableId: string, columnId: string) {
 }
 
 function selectRelation(id: string) {
+  store.clearMultiSelection()
   store.selectedRelationId = id
   store.selectedTableId    = null
   store.selectedGroupId    = null

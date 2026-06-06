@@ -11,7 +11,7 @@
       '--group-color-rgb': hexToRgb(group.color),
       '--nest-depth': depth,
     }"
-    @click.stop="$emit('select')"
+    @click.stop="$emit('select', $event)"
   >
     <!-- Drag header -->
     <div
@@ -44,7 +44,7 @@ defineProps<{
 }>()
 
 defineEmits<{
-  select: []
+  select: [e: MouseEvent]
   edit: []
   'mousedown-header': [e: MouseEvent]
   'mousedown-resize': [e: MouseEvent]

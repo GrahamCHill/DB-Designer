@@ -16,7 +16,7 @@
       '--dot-color-rgb': hexToRgb(table.color),
     }"
     @mousedown.stop="$emit('mousedown', $event)"
-    @click.stop="$emit('select')"
+    @click.stop="$emit('select', $event)"
   >
     <!-- Header -->
     <div class="table-header" :style="{ borderColor: table.color }">
@@ -114,7 +114,7 @@ defineProps<{
 
 defineEmits<{
   mousedown:      [e: MouseEvent]
-  select:         []
+  select:         [e: MouseEvent]
   edit:           []
   delete:         []
   'start-relation': [columnId: string]

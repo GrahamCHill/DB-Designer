@@ -124,6 +124,9 @@ export const useSchemaStore = defineStore('schema', () => {
   const selectedTableId    = ref<string | null>(null)
   const selectedRelationId = ref<string | null>(null)
   const selectedGroupId    = ref<string | null>(null)
+  const multiSelectedTableIds = ref<Set<string>>(new Set())
+  const multiSelectedGroupIds = ref<Set<string>>(new Set())
+  const copiedCanvasSelection = ref<{ tableIds: string[]; groupIds: string[] } | null>(null)
   const editingTableId     = ref<string | null>(null)
   const editingGroupId     = ref<string | null>(null)
   const draftTableIds      = ref<Set<string>>(new Set())
@@ -139,6 +142,25 @@ export const useSchemaStore = defineStore('schema', () => {
   function clearSelection() {
     selectedTableId.value = selectedRelationId.value = selectedGroupId.value =
       editingTableId.value = editingGroupId.value = null
+    multiSelectedTableIds.value = new Set()
+    multiSelectedGroupIds.value = new Set()
+  }
+
+  function clearMultiSelection() {
+    multiSelectedTableIds.value = new Set()
+    multiSelectedGroupIds.value = new Set()
+  }
+
+  function uniqueCopyName(name: string, existingNames: string[]) {
+    const normalizedExisting = new Set(existingNames.map(value => value.toLowerCase()))
+    const baseName = name.replace(/_\d+$/, '')
+    let copyIndex = 2
+    let candidate = `${baseName}_${copyIndex}`
+    while (normalizedExisting.has(candidate.toLowerCase())) {
+      copyIndex++
+      candidate = `${baseName}_${copyIndex}`
+    }
+    return candidate
   }
 
   // Tables
@@ -172,6 +194,7 @@ export const useSchemaStore = defineStore('schema', () => {
     }
     s.tables.push(table)
     draftTableIds.value = new Set([...draftTableIds.value, table.id])
+    clearMultiSelection()
     selectedTableId.value = table.id
     editingTableId.value  = table.id
     persist()
@@ -211,6 +234,7 @@ export const useSchemaStore = defineStore('schema', () => {
     }
     s.tables.push(resource)
     draftTableIds.value = new Set([...draftTableIds.value, resource.id])
+    clearMultiSelection()
     selectedTableId.value = resource.id
     editingTableId.value = resource.id
     persist()
@@ -353,6 +377,7 @@ export const useSchemaStore = defineStore('schema', () => {
     }
     s.groups.push(group)
     draftGroupIds.value = new Set([...draftGroupIds.value, group.id])
+    clearMultiSelection()
     selectedGroupId.value = group.id
     editingGroupId.value  = group.id
     persist()
@@ -654,6 +679,155 @@ export const useSchemaStore = defineStore('schema', () => {
 
   function newSchema() { tabsStore.newTab(); clearSelection() }
 
+  function selectAllCanvas() {
+    multiSelectedTableIds.value = new Set(sc().tables.map(table => table.id))
+    multiSelectedGroupIds.value = new Set(sc().groups.map(group => group.id))
+    selectedTableId.value = null
+    selectedGroupId.value = null
+    selectedRelationId.value = null
+  }
+
+  function selectedCanvasItemIds() {
+    const tableIds = multiSelectedTableIds.value.size > 0
+      ? [...multiSelectedTableIds.value]
+      : selectedTableId.value
+        ? [selectedTableId.value]
+        : []
+    const groupIds = multiSelectedGroupIds.value.size > 0
+      ? [...multiSelectedGroupIds.value]
+      : selectedGroupId.value
+        ? [selectedGroupId.value]
+        : []
+    return { tableIds, groupIds }
+  }
+
+  function copySelectedCanvasItems() {
+    const { tableIds, groupIds } = selectedCanvasItemIds()
+    if (tableIds.length === 0 && groupIds.length === 0) return
+    copiedCanvasSelection.value = { tableIds: [...tableIds], groupIds: [...groupIds] }
+  }
+
+  function hasCopiedCanvasItems() {
+    return !!copiedCanvasSelection.value &&
+      (copiedCanvasSelection.value.tableIds.length > 0 || copiedCanvasSelection.value.groupIds.length > 0)
+  }
+
+  function duplicateCanvasItems(selectedTableIds: string[], selectedGroupIds: string[]) {
+    const s = sc()
+
+    if (selectedTableIds.length === 0 && selectedGroupIds.length === 0) return
+
+    const existingTableNames = s.tables.map(table => table.name)
+    const existingGroupNames = s.groups.map(group => group.name)
+    const groupIdMap = new Map<string, string>()
+    const tableIdMap = new Map<string, string>()
+    const nextGroups: TableGroup[] = []
+    const nextTables: Table[] = []
+
+    for (const groupId of selectedGroupIds) {
+      const group = s.groups.find(entry => entry.id === groupId)
+      if (!group) continue
+      const clonedId = uuidv4()
+      groupIdMap.set(group.id, clonedId)
+      const clonedGroup: TableGroup = {
+        ...group,
+        id: clonedId,
+        name: uniqueCopyName(group.name, [...existingGroupNames, ...nextGroups.map(entry => entry.name)]),
+        position: { x: group.position.x + 36, y: group.position.y + 36 },
+        parentGroupId: group.parentGroupId,
+      }
+      nextGroups.push(clonedGroup)
+    }
+
+    for (const group of nextGroups) {
+      if (group.parentGroupId && groupIdMap.has(group.parentGroupId)) {
+        group.parentGroupId = groupIdMap.get(group.parentGroupId)!
+      }
+    }
+
+    for (const tableId of selectedTableIds) {
+      const table = s.tables.find(entry => entry.id === tableId)
+      if (!table) continue
+      const clonedId = uuidv4()
+      tableIdMap.set(table.id, clonedId)
+      const clonedTable: Table = {
+        ...table,
+        id: clonedId,
+        name: uniqueCopyName(table.name, [...existingTableNames, ...nextTables.map(entry => entry.name)]),
+        position: { x: table.position.x + 36, y: table.position.y + 36 },
+        groupId: table.groupId && groupIdMap.has(table.groupId) ? groupIdMap.get(table.groupId)! : table.groupId,
+        columns: table.columns.map(column => ({ ...column, id: uuidv4() })),
+      }
+      nextTables.push(clonedTable)
+    }
+
+    const nextRelations: Relation[] = []
+    for (const relation of s.relations) {
+      if (!tableIdMap.has(relation.sourceTableId) || !tableIdMap.has(relation.targetTableId)) continue
+      const sourceTable = s.tables.find(entry => entry.id === relation.sourceTableId)
+      const targetTable = s.tables.find(entry => entry.id === relation.targetTableId)
+      const clonedSourceTable = nextTables.find(entry => entry.id === tableIdMap.get(relation.sourceTableId))
+      const clonedTargetTable = nextTables.find(entry => entry.id === tableIdMap.get(relation.targetTableId))
+      if (!sourceTable || !targetTable || !clonedSourceTable || !clonedTargetTable) continue
+
+      const sourceColumnIndex = sourceTable.columns.findIndex(column => column.id === relation.sourceColumnId)
+      const targetColumnIndex = targetTable.columns.findIndex(column => column.id === relation.targetColumnId)
+      if (sourceColumnIndex === -1 || targetColumnIndex === -1) continue
+
+      nextRelations.push({
+        ...relation,
+        id: uuidv4(),
+        sourceTableId: clonedSourceTable.id,
+        sourceColumnId: clonedSourceTable.columns[sourceColumnIndex].id,
+        targetTableId: clonedTargetTable.id,
+        targetColumnId: clonedTargetTable.columns[targetColumnIndex].id,
+        waypoints: relation.waypoints ? relation.waypoints.map(point => ({ x: point.x + 36, y: point.y + 36 })) : [],
+      })
+    }
+
+    s.groups.push(...nextGroups)
+    s.tables.push(...nextTables)
+    s.relations.push(...nextRelations)
+    multiSelectedGroupIds.value = new Set(nextGroups.map(group => group.id))
+    multiSelectedTableIds.value = new Set(nextTables.map(table => table.id))
+    selectedGroupId.value = null
+    selectedTableId.value = null
+    selectedRelationId.value = null
+    persist()
+  }
+
+  function duplicateSelectedCanvasItems() {
+    const { tableIds, groupIds } = selectedCanvasItemIds()
+    duplicateCanvasItems(tableIds, groupIds)
+  }
+
+  function pasteCopiedCanvasItems() {
+    if (!copiedCanvasSelection.value) return
+    duplicateCanvasItems(copiedCanvasSelection.value.tableIds, copiedCanvasSelection.value.groupIds)
+  }
+
+  function toggleTableSelection(tableId: string) {
+    const next = new Set(multiSelectedTableIds.value)
+    if (selectedTableId.value && selectedTableId.value !== tableId) next.add(selectedTableId.value)
+    if (next.has(tableId)) next.delete(tableId)
+    else next.add(tableId)
+    multiSelectedTableIds.value = next
+    selectedTableId.value = null
+    selectedGroupId.value = null
+    selectedRelationId.value = null
+  }
+
+  function toggleGroupSelection(groupId: string) {
+    const next = new Set(multiSelectedGroupIds.value)
+    if (selectedGroupId.value && selectedGroupId.value !== groupId) next.add(selectedGroupId.value)
+    if (next.has(groupId)) next.delete(groupId)
+    else next.add(groupId)
+    multiSelectedGroupIds.value = next
+    selectedTableId.value = null
+    selectedGroupId.value = null
+    selectedRelationId.value = null
+  }
+
   function isDraftTable(tableId: string) {
     return draftTableIds.value.has(tableId)
   }
@@ -675,6 +849,7 @@ export const useSchemaStore = defineStore('schema', () => {
   return {
     schema,
     selectedTableId, selectedRelationId, selectedGroupId, editingTableId, editingGroupId,
+    multiSelectedTableIds, multiSelectedGroupIds,
     selectedTable, selectedGroup, clearSelection, showMinimap, lightExportMode,
     sqlTables, resourceTables,
     createTable, updateTable, deleteTable,
@@ -687,6 +862,9 @@ export const useSchemaStore = defineStore('schema', () => {
     updateGroupSize, commitGroupSize,
     assignTableToGroup, toggleTableLock,
     updateSchemaMeta, setSchemaDialect,
+    clearMultiSelection, selectAllCanvas, duplicateSelectedCanvasItems,
+    copySelectedCanvasItems, pasteCopiedCanvasItems, hasCopiedCanvasItems,
+    toggleTableSelection, toggleGroupSelection,
     isDraftTable, isDraftGroup, discardDraftTable, discardDraftGroup,
     exportSQL, saveToFile, loadFromJSON, newSchema,
   }
