@@ -479,16 +479,45 @@ function connectorPos(tableId: string, colId: string, side: 'left' | 'right') {
 }
 
 function makeCurveSegment(a: { x: number; y: number }, b: { x: number; y: number }, move = true) {
-  const cx = Math.max(Math.abs(b.x - a.x) * 0.5, 80)
-  return `${move ? `M ${a.x} ${a.y} ` : ''}C ${a.x + cx} ${a.y}, ${b.x - cx} ${b.y}, ${b.x} ${b.y}`
+  const { c1, c2 } = bezierControls(a, b)
+  return `${move ? `M ${a.x} ${a.y} ` : ''}C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${b.x} ${b.y}`
 }
 
 function makeCurve(a: { x: number; y: number }, b: { x: number; y: number }) {
   return makeCurveSegment(a, b)
 }
 
+function getSmoothCurveSegments(points: { x: number; y: number }[]) {
+  if (points.length < 2) return []
+
+  return points.slice(0, -1).map((point, index) => {
+    const p0 = points[Math.max(0, index - 1)]
+    const p1 = point
+    const p2 = points[index + 1]
+    const p3 = points[Math.min(points.length - 1, index + 2)]
+    const tension = 0.18
+
+    return {
+      start: p1,
+      c1: {
+        x: p1.x + (p2.x - p0.x) * tension,
+        y: p1.y + (p2.y - p0.y) * tension,
+      },
+      c2: {
+        x: p2.x - (p3.x - p1.x) * tension,
+        y: p2.y - (p3.y - p1.y) * tension,
+      },
+      end: p2,
+    }
+  })
+}
+
 function bezierControls(a: { x: number; y: number }, b: { x: number; y: number }) {
-  const cx = Math.max(Math.abs(b.x - a.x) * 0.5, 80)
+  const dx = b.x - a.x
+  const backward = dx < 0
+  const cx = backward
+    ? Math.min(Math.max(Math.abs(dx) * 0.14, 28), 56)
+    : Math.max(Math.abs(dx) * 0.5, 80)
   return {
     c1: { x: a.x + cx, y: a.y },
     c2: { x: b.x - cx, y: b.y },
@@ -518,11 +547,14 @@ function relationRoutePoints(rel: Relation) {
 function getRelationPath(rel: Relation) {
   const points = relationRoutePoints(rel)
   if (points.length === 2) return makeCurve(points[0], points[1])
-
-  return points
-    .slice(0, -1)
-    .map((point, index) => makeCurveSegment(point, points[index + 1], index === 0))
-    .join(' ')
+  const segments = getSmoothCurveSegments(points)
+  if (segments.length === 0) return ''
+  return [
+    `M ${segments[0].start.x} ${segments[0].start.y}`,
+    ...segments.map(segment =>
+      `C ${segment.c1.x} ${segment.c1.y}, ${segment.c2.x} ${segment.c2.y}, ${segment.end.x} ${segment.end.y}`
+    ),
+  ].join(' ')
 }
 
 function relLabelPos(rel: Relation) {
@@ -546,17 +578,20 @@ function relationPathMidpoint(rel: Relation) {
   let total = 0
 
   for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i]
-    const b = points[i + 1]
-    const { c1, c2 } = bezierControls(a, b)
-    let prev = a
+    const segments = points.length === 2
+      ? [{ start: points[0], c1: bezierControls(points[0], points[1]).c1, c2: bezierControls(points[0], points[1]).c2, end: points[1] }]
+      : getSmoothCurveSegments(points)
+    for (const segment of segments) {
+      let prev = segment.start
 
-    for (let step = 1; step <= 24; step++) {
-      const point = cubicPoint(a, c1, c2, b, step / 24)
-      total += Math.hypot(point.x - prev.x, point.y - prev.y)
-      samples.push({ ...point, distance: total })
-      prev = point
+      for (let step = 1; step <= 24; step++) {
+        const point = cubicPoint(segment.start, segment.c1, segment.c2, segment.end, step / 24)
+        total += Math.hypot(point.x - prev.x, point.y - prev.y)
+        samples.push({ ...point, distance: total })
+        prev = point
+      }
     }
+    break
   }
 
   if (samples.length === 0) return relationMidpoint(rel)
@@ -573,21 +608,23 @@ function relationInsertionPoint(rel: Relation, target: { x: number; y: number })
   }
 
   for (let i = 0; i < points.length - 1; i++) {
-    const a = points[i]
-    const b = points[i + 1]
-    const { c1, c2 } = bezierControls(a, b)
-
-    for (let step = 0; step <= 32; step++) {
-      const point = cubicPoint(a, c1, c2, b, step / 32)
-      const distance = Math.hypot(point.x - target.x, point.y - target.y)
-      if (distance < best.distance) {
-        best = {
-          point,
-          insertAt: i,
-          distance,
+    const segments = points.length === 2
+      ? [{ start: points[0], c1: bezierControls(points[0], points[1]).c1, c2: bezierControls(points[0], points[1]).c2, end: points[1], insertAt: i }]
+      : getSmoothCurveSegments(points).map((segment, segmentIndex) => ({ ...segment, insertAt: segmentIndex }))
+    for (const segment of segments) {
+      for (let step = 0; step <= 32; step++) {
+        const point = cubicPoint(segment.start, segment.c1, segment.c2, segment.end, step / 32)
+        const distance = Math.hypot(point.x - target.x, point.y - target.y)
+        if (distance < best.distance) {
+          best = {
+            point,
+            insertAt: segment.insertAt,
+            distance,
+          }
         }
       }
     }
+    break
   }
 
   return best

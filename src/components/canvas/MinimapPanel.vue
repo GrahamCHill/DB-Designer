@@ -100,7 +100,11 @@ function getConnector(tableId: string, colId: string, side: 'left' | 'right') {
 function getRelPath(rel: Relation) {
   const src = getConnector(rel.sourceTableId, rel.sourceColumnId, 'right')
   const tgt = getConnector(rel.targetTableId, rel.targetColumnId, 'left')
-  const cx = Math.abs(tgt.x - src.x) * 0.5
+  const dx = tgt.x - src.x
+  const backward = dx < 0
+  const cx = backward
+    ? Math.min(Math.max(Math.abs(dx) * 0.14, 28), 56)
+    : Math.max(Math.abs(dx) * 0.5, 80)
   return `M ${src.x} ${src.y} C ${src.x + cx} ${src.y}, ${tgt.x - cx} ${tgt.y}, ${tgt.x} ${tgt.y}`
 }
 
