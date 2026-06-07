@@ -12,6 +12,10 @@
           <input v-model="draft.name" placeholder="TypeName" />
         </div>
         <div class="field-row">
+          <label>Description</label>
+          <textarea v-model="draft.description" placeholder="What this type represents in requests or responses"></textarea>
+        </div>
+        <div class="field-row">
           <label>Color</label>
           <input type="color" v-model="draft.color" class="color-input" />
         </div>
@@ -22,8 +26,13 @@
         <div v-for="(f, i) in draft.fields" :key="f.id" class="param-row">
           <input v-model="f.name" placeholder="fieldName" class="sm-input flex-1" />
           <input v-model="f.type" placeholder="string" class="sm-input w100" />
+          <input v-model="f.description" placeholder="description" class="sm-input flex-1" />
           <label class="req-check"><input type="checkbox" v-model="f.required" /> req</label>
           <button class="del-btn" @click="draft.fields.splice(i,1)">x</button>
+        </div>
+        <div class="shape-preview">
+          <div class="shape-title">Example JSON Shape</div>
+          <pre class="shape-code"><code>{{ exampleJson }}</code></pre>
         </div>
       </div>
       <div class="modal-footer">
@@ -35,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { reactive, computed } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import { useApiStore } from '../../stores/api'
 import type { RestTypeNode } from '../../types/api'
@@ -45,9 +54,21 @@ const emit  = defineEmits(['close'])
 const store = useApiStore()
 
 const draft = reactive<RestTypeNode>(JSON.parse(JSON.stringify(props.node)))
+const exampleJson = computed(() => JSON.stringify(Object.fromEntries(
+  draft.fields.map((field) => [field.name || 'field', sampleValue(field.type)])
+), null, 2))
 
 function addField() {
   draft.fields.push({ id: uuidv4(), name: '', type: 'string', required: false, description: '' })
+}
+function sampleValue(type: string) {
+  const lower = type.toLowerCase()
+  if (lower.includes('int') || lower.includes('float') || lower.includes('double') || lower.includes('decimal') || lower.includes('numeric') || lower.includes('number')) return 0
+  if (lower.includes('bool')) return true
+  if (lower.includes('json')) return { key: 'value' }
+  if (lower.includes('date') || lower.includes('time')) return '2026-01-01T00:00:00Z'
+  if (lower.includes('id')) return 'id_123'
+  return 'string'
 }
 function save() {
   store.updateRestNode(props.node.id, JSON.parse(JSON.stringify(draft)))
@@ -81,6 +102,13 @@ function save() {
   color: #e0e0e0; padding: 7px 10px; font-size: 12px;
   font-family: 'JetBrains Mono', monospace; outline: none;
 }
+.field-row textarea {
+  min-height: 78px;
+  resize: vertical;
+  background: #1a1a24; border: 1px solid #2a2a3a; border-radius: 6px;
+  color: #e0e0e0; padding: 7px 10px; font-size: 12px;
+  font-family: 'JetBrains Mono', monospace; outline: none;
+}
 .color-input { width: 48px; height: 32px; padding: 2px; border-radius: 6px; cursor: pointer; }
 .section-head {
   display: flex; justify-content: space-between; align-items: center;
@@ -102,6 +130,28 @@ function save() {
 .req-check { display: flex; align-items: center; gap: 3px; font-size: 10px; color: #555; white-space: nowrap; }
 .del-btn { background: none; border: none; color: #555; cursor: pointer; font-size: 12px; }
 .del-btn:hover { color: #EF4444; }
+.shape-preview {
+  margin-top: 8px;
+  border: 1px solid #2a2a3a;
+  border-radius: 8px;
+  background: #101019;
+  padding: 10px;
+}
+.shape-title {
+  color: #7f92af;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.shape-code {
+  margin: 0;
+  color: #b7c8de;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
 .btn-cancel { background: none; border: 1px solid #2a2a3a; color: #666; border-radius: 6px; padding: 7px 16px; font-size: 12px; cursor: pointer; }
 .btn-save { background: #3ECF8E; color: #0a1a12; border: none; border-radius: 6px; padding: 7px 20px; font-size: 12px; font-weight: 700; cursor: pointer; }
 .btn-save:hover { background: #45e09a; }

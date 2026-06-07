@@ -30,6 +30,20 @@ export interface QJoin {
   joinType: JoinType
 }
 
+export interface QuerySchemaRelationRef {
+  sourceTable: string
+  sourceColumn: string
+  targetTable: string
+  targetColumn: string
+  type?: string
+}
+
+export interface QuerySchemaRef {
+  name: string
+  tables: Array<{ name: string; columns: string[] }>
+  relations: QuerySchemaRelationRef[]
+}
+
 export type WhereOp = '=' | '!=' | '>' | '>=' | '<' | '<=' | 'LIKE' | 'IN' | 'IS NULL' | 'IS NOT NULL'
 export type WhereLogic = 'AND' | 'OR'
 
@@ -69,6 +83,7 @@ export const useQueryStore = defineStore('query', () => {
   const selectedJoinId = ref<string | null>(null)
   const drawingJoin = ref<{ fromTableId: string; fromColumn: string; mouseX: number; mouseY: number } | null>(null)
   const manualSql = ref<string | null>(null)
+  const schemaRef = ref<QuerySchemaRef | null>(null)
 
   function addTable(schemaTable: string, columns: string[], pos = { x: 100, y: 100 }): QTable {
     manualSql.value = null
@@ -157,6 +172,39 @@ export const useQueryStore = defineStore('query', () => {
     selectedJoinId.value = join.id
     selectedTableId.value = null
     return join
+  }
+
+  function setSchemaReference(next: QuerySchemaRef | null) {
+    schemaRef.value = next
+  }
+
+  function validateJoin(join: Pick<QJoin, 'leftTableId' | 'leftColumn' | 'rightTableId' | 'rightColumn'>) {
+    const schema = schemaRef.value
+    if (!schema) {
+      return { valid: true, reason: 'No schema relation metadata loaded for validation.' }
+    }
+
+    const left = tables.value.find((table) => table.id === join.leftTableId)
+    const right = tables.value.find((table) => table.id === join.rightTableId)
+    if (!left || !right) {
+      return { valid: false, reason: 'One side of this join no longer exists on the canvas.' }
+    }
+
+    const hasMatch = schema.relations.some((relation) => (
+      relation.sourceTable === left.schemaTable &&
+      relation.sourceColumn === join.leftColumn &&
+      relation.targetTable === right.schemaTable &&
+      relation.targetColumn === join.rightColumn
+    ) || (
+      relation.sourceTable === right.schemaTable &&
+      relation.sourceColumn === join.rightColumn &&
+      relation.targetTable === left.schemaTable &&
+      relation.targetColumn === join.leftColumn
+    ))
+
+    return hasMatch
+      ? { valid: true, reason: 'Join matches a schema relationship.' }
+      : { valid: false, reason: `No relation in the loaded schema links ${left.schemaTable}.${join.leftColumn} to ${right.schemaTable}.${join.rightColumn}.` }
   }
 
   function updateJoinType(id: string, type: JoinType) {
@@ -338,6 +386,7 @@ export const useQueryStore = defineStore('query', () => {
     selectedTableId,
     selectedJoinId,
     drawingJoin,
+    schemaRef,
     sql,
     addTable,
     removeTable,
@@ -346,6 +395,8 @@ export const useQueryStore = defineStore('query', () => {
     setColumnAggregate,
     setColumnAlias,
     addJoin,
+    setSchemaReference,
+    validateJoin,
     updateJoinType,
     removeJoin,
     addWhere,

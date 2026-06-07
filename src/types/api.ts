@@ -9,6 +9,7 @@ export type ApiExportTarget =
   | 'openapi'
   | 'rest-ts-fetch'
   | 'rest-js-fetch'
+  | 'rest-go-client'
   | 'rest-python-fastapi'
   | 'graphql-sdl'
   | 'graphql-resolvers-ts'

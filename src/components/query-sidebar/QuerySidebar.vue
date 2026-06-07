@@ -130,6 +130,7 @@
 import { computed, ref } from 'vue'
 import { useQueryStore } from '../../stores/query'
 import { useSchemaStore } from '../../stores/schema'
+import type { QuerySchemaRef } from '../../stores/query'
 
 const query = useQueryStore()
 const dbStore = useSchemaStore()
@@ -156,9 +157,35 @@ const schemaTables = computed<SchemaTable[]>(() => {
   }))
 })
 
+function buildSchemaReferenceFromCurrent(): QuerySchemaRef {
+  return {
+    name: dbStore.schema.name || 'Current Schema',
+    tables: dbStore.schema.tables
+      .filter((table) => (table.kind ?? 'table') === 'table')
+      .map((table) => ({
+        name: table.name,
+        columns: table.columns.map((column) => column.name),
+      })),
+    relations: dbStore.schema.relations.map((relation) => {
+      const sourceTable = dbStore.schema.tables.find((table) => table.id === relation.sourceTableId)
+      const targetTable = dbStore.schema.tables.find((table) => table.id === relation.targetTableId)
+      const sourceColumn = sourceTable?.columns.find((column) => column.id === relation.sourceColumnId)
+      const targetColumn = targetTable?.columns.find((column) => column.id === relation.targetColumnId)
+      return {
+        sourceTable: sourceTable?.name ?? '',
+        sourceColumn: sourceColumn?.name ?? '',
+        targetTable: targetTable?.name ?? '',
+        targetColumn: targetColumn?.name ?? '',
+        type: relation.type,
+      }
+    }).filter((relation) => relation.sourceTable && relation.sourceColumn && relation.targetTable && relation.targetColumn),
+  }
+}
+
 function useCurrentSchema() {
   externalSchema.value = null
   schemaName.value = dbStore.schema.name || 'Current Schema'
+  query.setSchemaReference(buildSchemaReferenceFromCurrent())
 }
 
 function loadSchema(e: Event) {
@@ -178,6 +205,28 @@ function loadSchema(e: Event) {
         columns: (table.columns ?? []).map((column: any) => ({ name: column.name })),
       }))
       schemaName.value = schema.name ?? file.name
+      query.setSchemaReference({
+        name: schema.name ?? file.name,
+        tables: (schema.tables ?? [])
+          .filter((table: any) => (table.kind ?? 'table') === 'table')
+          .map((table: any) => ({
+            name: table.name,
+            columns: (table.columns ?? []).map((column: any) => column.name),
+          })),
+        relations: (schema.relations ?? []).map((relation: any) => {
+          const sourceTable = (schema.tables ?? []).find((table: any) => table.id === relation.sourceTableId)
+          const targetTable = (schema.tables ?? []).find((table: any) => table.id === relation.targetTableId)
+          const sourceColumn = sourceTable?.columns?.find((column: any) => column.id === relation.sourceColumnId)
+          const targetColumn = targetTable?.columns?.find((column: any) => column.id === relation.targetColumnId)
+          return {
+            sourceTable: sourceTable?.name ?? '',
+            sourceColumn: sourceColumn?.name ?? '',
+            targetTable: targetTable?.name ?? '',
+            targetColumn: targetColumn?.name ?? '',
+            type: relation.type,
+          }
+        }).filter((relation: any) => relation.sourceTable && relation.sourceColumn && relation.targetTable && relation.targetColumn),
+      })
     } catch {
       alert('Could not parse schema file')
     }

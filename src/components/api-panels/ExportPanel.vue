@@ -18,12 +18,18 @@
       </div>
 
       <div class="panel-body">
+        <div class="export-guide">
+          <div class="guide-title">What this export is for</div>
+          <p class="guide-copy">
+            OpenAPI JSON can be imported into Swagger UI, Postman, and downstream code generators. Client and server stub exports are starter code you extend inside your app.
+          </p>
+        </div>
         <pre class="code-preview"><code>{{ activeOutput }}</code></pre>
       </div>
 
       <div class="panel-footer">
         <button class="btn-copy" @click="copy">{{ copied ? 'Copied' : 'Copy' }}</button>
-        <button class="btn-download" @click="download">Download</button>
+        <button class="btn-download" @click="download">Export</button>
       </div>
     </div>
   </div>
@@ -95,6 +101,20 @@ async function download() {
 .close-btn { background: none; border: none; color: #555; cursor: pointer; font-size: 14px; }
 .close-btn:hover { color: #e0e0e0; }
 .panel-body { flex: 1; overflow: auto; padding: 0; }
+.export-guide {
+  padding: 16px 18px 0;
+}
+.guide-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #e8f2ff;
+  margin-bottom: 6px;
+}
+.guide-copy {
+  color: #8fa5c1;
+  font-size: 11px;
+  line-height: 1.5;
+}
 .code-preview {
   margin: 0; padding: 18px;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;

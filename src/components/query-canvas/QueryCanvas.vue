@@ -40,10 +40,20 @@
               :x="joinMid(join).x"
               :y="joinMid(join).y - 6"
               class="join-label"
-              :fill="query.selectedJoinId === join.id ? '#60A5FA' : '#3B82F660'"
+              :fill="joinValidation(join).valid ? (query.selectedJoinId === join.id ? '#60A5FA' : '#3B82F660') : '#FCA5A5'"
               text-anchor="middle"
             >
               {{ join.joinType }}
+            </text>
+            <text
+              v-if="!joinValidation(join).valid"
+              :x="joinMid(join).x"
+              :y="joinMid(join).y + 10"
+              class="join-warning-label"
+              fill="#F87171"
+              text-anchor="middle"
+            >
+              invalid relation
             </text>
           </g>
 
@@ -169,6 +179,11 @@
         <span>or click a table name to add it</span>
       </div>
 
+      <div v-if="query.tables.length > 0" class="selection-legend">
+        <span class="legend-chip">[ ]</span>
+        <span class="legend-copy">Click the square brackets to include a column in `SELECT`. `[x]` means it is already selected.</span>
+      </div>
+
       <div v-if="selectedJoin" class="join-inspector">
         <div class="ji-context">
           <div class="ji-context-row">
@@ -178,6 +193,12 @@
           <div class="ji-context-row">
             <span class="ji-context-label">Join</span>
             <span class="ji-context-value">{{ selectedJoinTables.target }}</span>
+          </div>
+          <div class="ji-context-row">
+            <span class="ji-context-label">Status</span>
+            <span class="ji-context-value" :class="{ invalid: !selectedJoinValidation.valid }">
+              {{ selectedJoinValidation.valid ? 'Valid schema join' : 'Not in schema' }}
+            </span>
           </div>
         </div>
         <span class="ji-label">JOIN type</span>
@@ -269,6 +290,9 @@ const contentStyle = computed(() => ({
 }))
 
 const selectedJoin = computed(() => query.joins.find((join) => join.id === query.selectedJoinId) ?? null)
+const selectedJoinValidation = computed(() =>
+  selectedJoin.value ? query.validateJoin(selectedJoin.value) : { valid: true, reason: '' }
+)
 const selectedJoinTables = computed(() => {
   const join = selectedJoin.value
   if (!join) return { source: '', target: '' }
@@ -422,6 +446,10 @@ function isJoinSource(tableId: string, column: string) {
   return query.drawingJoin?.fromTableId === tableId && query.drawingJoin?.fromColumn === column
 }
 
+function joinValidation(join: QJoin) {
+  return query.validateJoin(join)
+}
+
 function selectedCount(table: QTable) {
   return table.columns.filter((column) => column.selected).length
 }
@@ -539,6 +567,12 @@ const drawingPath = computed(() => {
 .join-label {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
+  font-weight: 700;
+}
+
+.join-warning-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
   font-weight: 700;
 }
 
@@ -729,6 +763,35 @@ const drawingPath = computed(() => {
   font-size: 12px;
 }
 
+.selection-legend {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 360px;
+  padding: 10px 12px;
+  border: 1px solid #2c3f60;
+  border-radius: 10px;
+  background: rgba(10, 14, 24, 0.92);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.legend-chip {
+  color: #60a5fa;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.legend-copy {
+  color: #a9b9cf;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .sql-panel {
   display: flex;
   flex-direction: column;
@@ -848,6 +911,10 @@ const drawingPath = computed(() => {
   color: #e2e8f0;
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
+}
+
+.ji-context-value.invalid {
+  color: #f87171;
 }
 
 .ji-label {

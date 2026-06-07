@@ -28,6 +28,28 @@
           </ul>
         </div>
 
+        <div v-if="store.mode === 'rest'" class="summary-block">
+          <div class="summary-title">REST Settings</div>
+          <div class="settings-grid">
+            <label class="settings-field">
+              <span>API Title</span>
+              <input :value="store.project.rest.title" @input="updateRestSettings('title', ($event.target as HTMLInputElement).value)" />
+            </label>
+            <label class="settings-field">
+              <span>Version</span>
+              <div class="settings-inline">
+                <input :value="store.project.rest.version" @input="updateRestSettings('version', ($event.target as HTMLInputElement).value)" />
+                <button class="mini-btn" @click="bumpRestVersion('minor')">v+1 minor</button>
+                <button class="mini-btn" @click="bumpRestVersion('major')">v+1 major</button>
+              </div>
+            </label>
+            <label class="settings-field">
+              <span>Base URL</span>
+              <input :value="store.project.rest.baseUrl" @input="updateRestSettings('baseUrl', ($event.target as HTMLInputElement).value)" />
+            </label>
+          </div>
+        </div>
+
         <div class="catalog-block">
           <div class="summary-title" title="Mode-aware list of items currently modeled on the API canvas">Canvas Catalog</div>
           <div class="catalog-sections">
@@ -68,8 +90,13 @@
           </select>
           <div class="preview-actions">
             <button class="ghost-btn" @click="copyOutput">{{ copied ? 'Copied' : 'Copy' }}</button>
-            <button class="solid-btn" @click="downloadOutput">Download</button>
+            <button class="solid-btn" @click="downloadOutput">Export</button>
           </div>
+        </div>
+
+        <div class="export-guide-card">
+          <div class="export-guide-title">Export guide</div>
+          <p class="export-guide-copy">{{ exportGuide }}</p>
         </div>
 
         <pre class="preview-code"><code>{{ previewText }}</code></pre>
@@ -288,7 +315,44 @@ function graphqlKindHint(kind: string): string {
   return 'GraphQL schema node'
 }
 
+function updateRestSettings(key: 'title' | 'version' | 'baseUrl', value: string) {
+  store.updateRestSchema({ [key]: value } as any)
+}
+
+function bumpRestVersion(mode: 'minor' | 'major') {
+  const current = store.project.rest.version || '1.0.0'
+  const match = current.match(/^(\d+)\.(\d+)\.(\d+)(.*)?$/)
+  if (!match) {
+    store.updateRestSchema({ version: mode === 'major' ? '2.0.0' : '1.1.0' })
+    return
+  }
+
+  const major = Number(match[1])
+  const minor = Number(match[2])
+  const suffix = match[4] ?? ''
+  const next = mode === 'major'
+    ? `${major + 1}.0.0${suffix}`
+    : `${major}.${minor + 1}.0${suffix}`
+
+  store.updateRestSchema({ version: next })
+}
+
 const previewText = computed(() => exportOutput(selectedTarget.value))
+const exportGuide = computed(() => {
+  if (selectedTarget.value === 'openapi') {
+    return 'Use this JSON with Swagger UI, Postman imports, contract review, and external code generators. It is the best handoff format when you want other tools to understand the API.'
+  }
+  if (selectedTarget.value === 'rest-ts-fetch' || selectedTarget.value === 'rest-js-fetch' || selectedTarget.value === 'rest-go-client') {
+    return 'This export is starter client code for calling your API. Drop it into an application repo, wire in auth and error handling, and replace any placeholder route details that still need implementation decisions.'
+  }
+  if (selectedTarget.value === 'rest-python-fastapi') {
+    return 'This export is a FastAPI scaffold. Use it to stand up route handlers quickly, then add persistence, validation, and real business logic inside each stub.'
+  }
+  if (selectedTarget.value === 'graphql-sdl' || selectedTarget.value === 'federation-sdl') {
+    return 'This export is schema-first contract output. Use it in docs, schema review, and gateway or server setup before writing resolvers.'
+  }
+  return 'This export is scaffold code meant to save setup time. Treat it as a generated starting point, then connect it to your real app logic.'
+})
 
 function chipStyle(item: CatalogItem) {
   return {
@@ -579,6 +643,56 @@ h3 {
   margin-bottom: 8px;
 }
 
+.settings-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.settings-field {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-field span {
+  color: #7f92af;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings-field input {
+  background: #18181f;
+  color: #e6effa;
+  border: 1px solid #25252f;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+
+.settings-inline {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.settings-inline input {
+  flex: 1;
+  min-width: 120px;
+}
+
+.mini-btn {
+  border: 1px solid #244437;
+  background: #0f1812;
+  color: #67dfab;
+  border-radius: 8px;
+  padding: 0 10px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .summary-list {
   margin: 0;
   padding-left: 18px;
@@ -696,6 +810,26 @@ h3 {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.export-guide-card {
+  border-radius: 12px;
+  border: 1px solid #1a1a24;
+  background: linear-gradient(180deg, #121219 0%, #0d0d12 100%);
+  padding: 12px;
+}
+
+.export-guide-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #d8e5f6;
+  margin-bottom: 6px;
+}
+
+.export-guide-copy {
+  color: #93a7c2;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .target-select {

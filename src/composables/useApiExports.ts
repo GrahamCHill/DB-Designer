@@ -6,6 +6,7 @@ const EXPORT_TARGETS: Record<ApiExportTarget, { label: string; ext: string }> = 
   openapi: { label: 'OpenAPI 3.0', ext: 'openapi.json' },
   'rest-ts-fetch': { label: 'TypeScript Fetch Client', ext: 'client.ts' },
   'rest-js-fetch': { label: 'JavaScript Fetch Client', ext: 'client.js' },
+  'rest-go-client': { label: 'Go HTTP Client', ext: 'client.go' },
   'rest-python-fastapi': { label: 'Python FastAPI Stubs', ext: 'fastapi.py' },
   'graphql-sdl': { label: 'GraphQL SDL', ext: 'graphql' },
   'graphql-resolvers-ts': { label: 'TypeScript Resolver Stubs', ext: 'resolvers.ts' },
@@ -59,6 +60,15 @@ function pyType(type: string): string {
   return 'str'
 }
 
+function goType(type: string): string {
+  const lower = type.toLowerCase()
+  if (lower.includes('int')) return 'int'
+  if (lower.includes('float') || lower.includes('double') || lower.includes('decimal') || lower.includes('numeric') || lower.includes('number')) return 'float64'
+  if (lower.includes('bool')) return 'bool'
+  if (lower.includes('json')) return 'map[string]any'
+  return 'string'
+}
+
 function escapeTemplateLiteral(value: string): string {
   return value.replace(/`/g, '\`').replace(/\$\{/g, '\\${')
 }
@@ -72,6 +82,7 @@ export function useApiExports() {
         { id: 'openapi' as ApiExportTarget, label: EXPORT_TARGETS.openapi.label },
         { id: 'rest-ts-fetch' as ApiExportTarget, label: EXPORT_TARGETS['rest-ts-fetch'].label },
         { id: 'rest-js-fetch' as ApiExportTarget, label: EXPORT_TARGETS['rest-js-fetch'].label },
+        { id: 'rest-go-client' as ApiExportTarget, label: EXPORT_TARGETS['rest-go-client'].label },
         { id: 'rest-python-fastapi' as ApiExportTarget, label: EXPORT_TARGETS['rest-python-fastapi'].label },
       ]
     }
@@ -301,6 +312,111 @@ export function useApiExports() {
     return lines.join('\n')
   }
 
+  function exportRestGoClient(): string {
+    const types = restTypes()
+    const lines: string[] = [
+      'package client',
+      '',
+      'import (',
+      '  "bytes"',
+      '  "context"',
+      '  "encoding/json"',
+      '  "fmt"',
+      '  "io"',
+      '  "net/http"',
+      '  "net/url"',
+      ')',
+      '',
+      `const APIBaseURL = "${store.project.rest.baseUrl || '/api'}"`,
+      '',
+    ]
+
+    for (const type of types) {
+      lines.push(`type ${toPascalCase(type.name)} struct {`)
+      if (!type.fields.length) {
+        lines.push('}')
+      } else {
+        for (const field of type.fields) {
+          lines.push(`  ${toPascalCase(field.name)} ${goType(field.type)} \`json:"${field.name}"\``)
+        }
+        lines.push('}')
+      }
+      lines.push('')
+    }
+
+    lines.push('type Client struct {')
+    lines.push('  BaseURL string')
+    lines.push('  HTTPClient *http.Client')
+    lines.push('}')
+    lines.push('')
+    lines.push('func NewClient(httpClient *http.Client) *Client {')
+    lines.push('  if httpClient == nil {')
+    lines.push('    httpClient = http.DefaultClient')
+    lines.push('  }')
+    lines.push('  return &Client{BaseURL: APIBaseURL, HTTPClient: httpClient}')
+    lines.push('}')
+    lines.push('')
+
+    for (const endpoint of restEndpoints()) {
+      const summaryBasis = endpoint.summary || `${endpoint.method} ${endpoint.path}`
+      const fnName = toPascalCase(summaryBasis)
+      const responseType = endpoint.responses.find(response => response.bodyTypeRef)?.bodyTypeRef
+      const returnType = responseType ? toPascalCase(types.find(type => type.id === responseType)?.name || 'ResponseModel') : 'map[string]any'
+      const requestType = endpoint.requestBodyRef ? types.find(type => type.id === endpoint.requestBodyRef) : undefined
+      const args = ['ctx context.Context']
+      if (endpoint.params.length) args.push('params map[string]string')
+      if (requestType) args.push(`body ${toPascalCase(requestType.name)}`)
+      lines.push(`func (c *Client) ${fnName}(${args.join(', ')}) (${returnType}, error) {`)
+      lines.push(`  endpointURL, err := url.Parse(c.BaseURL + "${endpoint.path}")`)
+      lines.push('  if err != nil {')
+      lines.push(`    return ${returnType}{}, err`)
+      lines.push('  }')
+      if (endpoint.params.length) {
+        lines.push('  query := endpointURL.Query()')
+        lines.push('  for key, value := range params {')
+        lines.push('    if value != "" {')
+        lines.push('      query.Set(key, value)')
+        lines.push('    }')
+        lines.push('  }')
+        lines.push('  endpointURL.RawQuery = query.Encode()')
+      }
+      if (requestType) {
+        lines.push('  payload, err := json.Marshal(body)')
+        lines.push('  if err != nil {')
+        lines.push(`    return ${returnType}{}, err`)
+        lines.push('  }')
+        lines.push(`  req, err := http.NewRequestWithContext(ctx, "${endpoint.method}", endpointURL.String(), bytes.NewReader(payload))`)
+      } else {
+        lines.push(`  req, err := http.NewRequestWithContext(ctx, "${endpoint.method}", endpointURL.String(), nil)`)
+      }
+      lines.push('  if err != nil {')
+      lines.push(`    return ${returnType}{}, err`)
+      lines.push('  }')
+      if (requestType) lines.push('  req.Header.Set("Content-Type", "application/json")')
+      lines.push('  res, err := c.HTTPClient.Do(req)')
+      lines.push('  if err != nil {')
+      lines.push(`    return ${returnType}{}, err`)
+      lines.push('  }')
+      lines.push('  defer res.Body.Close()')
+      lines.push('  if res.StatusCode >= 400 {')
+      lines.push('    bodyBytes, _ := io.ReadAll(res.Body)')
+      lines.push('    return ' + returnType + '{}, fmt.Errorf("request failed: %d %s", res.StatusCode, string(bodyBytes))')
+      lines.push('  }')
+      lines.push('  if res.StatusCode == http.StatusNoContent {')
+      lines.push(`    return ${returnType}{}, nil`)
+      lines.push('  }')
+      lines.push(`  var out ${returnType}`)
+      lines.push('  if err := json.NewDecoder(res.Body).Decode(&out); err != nil {')
+      lines.push(`    return ${returnType}{}, err`)
+      lines.push('  }')
+      lines.push('  return out, nil')
+      lines.push('}')
+      lines.push('')
+    }
+
+    return lines.join('\n')
+  }
+
   function resolverStubLines(useTypes: boolean): string[] {
     const lines: string[] = useTypes ? ['export const resolvers = {'] : ['const resolvers = {']
     for (const node of store.gqlNodes) {
@@ -396,6 +512,7 @@ export function useApiExports() {
     if (target === 'openapi') return exportOpenApi()
     if (target === 'rest-ts-fetch') return exportRestTsClient()
     if (target === 'rest-js-fetch') return exportRestJsClient()
+    if (target === 'rest-go-client') return exportRestGoClient()
     if (target === 'rest-python-fastapi') return exportRestFastApi()
     if (target === 'graphql-sdl') return store.exportGqlSdl()
     if (target === 'graphql-resolvers-ts') return exportGraphqlResolverStubsTs()

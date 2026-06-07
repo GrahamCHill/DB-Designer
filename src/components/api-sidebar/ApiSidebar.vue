@@ -17,11 +17,14 @@
       <input class="name-input" v-model="store.project.name" placeholder="Project name" />
       <div class="btn-row">
         <button class="btn-ghost-sm" @click="store.newProject">New</button>
-        <button class="btn-ghost-sm" @click="store.saveToFile">Save</button>
+        <button class="btn-ghost-sm" @click="store.saveToFile">Export</button>
         <label class="btn-ghost-sm">
-          Load
+          Import
           <input type="file" accept=".json" style="display:none" @change="loadFile" />
         </label>
+      </div>
+      <div class="project-hint">
+        `.api.json` preserves this designer canvas so you can reopen it later. Use the API overview panel to export OpenAPI or code stubs for real tooling.
       </div>
     </div>
 
@@ -65,6 +68,12 @@
         <button class="btn-primary" @click="addGqlType('type')">
           <span>+</span> New Type
         </button>
+        <div class="starter-block">
+          <div class="starter-title">Starter Kits</div>
+          <button class="btn-secondary" @click="createGraphqlCrudStarter">CRUD Starter</button>
+          <button class="btn-secondary" @click="ensureGraphqlRoot('query-root')">Query Root</button>
+          <button class="btn-secondary" @click="ensureGraphqlRoot('mutation-root')">Mutation Root</button>
+        </div>
         <div class="gql-kind-grid">
           <button v-for="k in gqlKinds" :key="k.id" class="gql-kind-btn"
             :style="{ '--k-color': k.color, '--k-color-rgb': hexToRgb(k.color) }" @click="addGqlType(k.id)">
@@ -80,6 +89,11 @@
         <button class="btn-secondary" @click="addFedType" :disabled="!hasServices">
           <span>+</span> Add Type
         </button>
+        <div class="starter-block">
+          <div class="starter-title">Starter Kits</div>
+          <button class="btn-secondary" @click="createFederationStarter">Subgraph Starter</button>
+          <button class="btn-secondary" @click="createFederationExtension" :disabled="!hasServices">Extension Type</button>
+        </div>
         <div v-if="!hasServices" class="hint">Create a service first</div>
       </template>
     </div>
@@ -260,6 +274,98 @@ function addService() { store.createService({ x: 60 + store.fedServices.length *
 function addFedType() {
   const svc = store.selectedServiceId ?? store.fedServices[0]?.id
   if (svc) store.createFedType(svc, nextPos())
+}
+
+function ensureGraphqlRoot(kind: GqlTypeKind) {
+  const name = kind === 'query-root' ? 'Query' : kind === 'mutation-root' ? 'Mutation' : 'Subscription'
+  const existing = store.gqlNodes.find((node) => node.kind === kind || node.name === name)
+  if (existing) {
+    store.selectedNodeId = existing.id
+    store.editingNodeId = existing.id
+    return existing
+  }
+  return store.createGqlType(kind, nextPos())
+}
+
+function createGraphqlCrudStarter() {
+  const itemType = store.createGqlType('type', nextPos())
+  store.updateGqlNode(itemType.id, {
+    name: 'Item',
+    description: 'Primary object type returned by the API.',
+    fields: [
+      { id: randomId(), name: 'id', type: 'ID!', description: 'Stable identifier', isDeprecated: false, args: [], resolverRef: null },
+      { id: randomId(), name: 'name', type: 'String!', description: 'Display name', isDeprecated: false, args: [], resolverRef: null },
+      { id: randomId(), name: 'createdAt', type: 'String!', description: 'Creation timestamp', isDeprecated: false, args: [], resolverRef: null },
+    ],
+  })
+
+  const inputType = store.createGqlType('input', nextPos())
+  store.updateGqlNode(inputType.id, {
+    name: 'ItemInput',
+    description: 'Payload for create and update mutations.',
+    fields: [
+      { id: randomId(), name: 'name', type: 'String!', description: 'Display name', isDeprecated: false, args: [], resolverRef: null },
+    ],
+  })
+
+  const queryRoot = ensureGraphqlRoot('query-root')
+  if (queryRoot) {
+    const existingNames = new Set(queryRoot.fields.map((field) => field.name))
+    const fields = [...queryRoot.fields]
+    if (!existingNames.has('items')) fields.push({ id: randomId(), name: 'items', type: '[Item!]!', description: 'List items', isDeprecated: false, args: [], resolverRef: null })
+    if (!existingNames.has('item')) fields.push({ id: randomId(), name: 'item', type: 'Item', description: 'Fetch one item', isDeprecated: false, args: [{ id: randomId(), name: 'id', type: 'ID!', defaultValue: '', description: 'Item id' }], resolverRef: null })
+    store.updateGqlNode(queryRoot.id, { fields })
+  }
+
+  const mutationRoot = ensureGraphqlRoot('mutation-root')
+  if (mutationRoot) {
+    const existingNames = new Set(mutationRoot.fields.map((field) => field.name))
+    const fields = [...mutationRoot.fields]
+    if (!existingNames.has('createItem')) fields.push({ id: randomId(), name: 'createItem', type: 'Item!', description: 'Create a new item', isDeprecated: false, args: [{ id: randomId(), name: 'input', type: 'ItemInput!', defaultValue: '', description: 'Item payload' }], resolverRef: null })
+    if (!existingNames.has('updateItem')) fields.push({ id: randomId(), name: 'updateItem', type: 'Item!', description: 'Update an existing item', isDeprecated: false, args: [{ id: randomId(), name: 'id', type: 'ID!', defaultValue: '', description: 'Item id' }, { id: randomId(), name: 'input', type: 'ItemInput!', defaultValue: '', description: 'Item payload' }], resolverRef: null })
+    store.updateGqlNode(mutationRoot.id, { fields })
+  }
+}
+
+function createFederationStarter() {
+  const service = store.createService({ x: 60 + store.fedServices.length * 40, y: 60 })
+  store.updateService(service.id, {
+    name: `catalog-service-${store.fedServices.length}`,
+    url: `https://catalog-${store.fedServices.length}.example.com/graphql`,
+  })
+  const type = store.createFedType(service.id, nextPos())
+  store.updateFedNode(type.id, {
+    name: 'Product',
+    description: 'Primary federated entity owned by this subgraph.',
+    isEntity: true,
+    keyFields: ['id'],
+    fields: [
+      { id: randomId(), name: 'id', type: 'ID!', isExternal: false, isRequired: false, requiresFields: '', isKey: true, description: 'Entity key' },
+      { id: randomId(), name: 'sku', type: 'String!', isExternal: false, isRequired: false, requiresFields: '', isKey: false, description: 'Business identifier' },
+      { id: randomId(), name: 'name', type: 'String!', isExternal: false, isRequired: false, requiresFields: '', isKey: false, description: 'Display name' },
+    ],
+  })
+}
+
+function createFederationExtension() {
+  const serviceId = store.selectedServiceId ?? store.fedServices[0]?.id
+  if (!serviceId) return
+  const type = store.createFedType(serviceId, nextPos())
+  store.updateFedNode(type.id, {
+    name: 'Product',
+    description: 'Extension of an entity owned by another subgraph.',
+    isEntity: true,
+    isExtension: true,
+    keyFields: ['id'],
+    fields: [
+      { id: randomId(), name: 'id', type: 'ID!', isExternal: true, isRequired: false, requiresFields: '', isKey: true, description: 'External key field' },
+      { id: randomId(), name: 'reviewsCount', type: 'Int!', isExternal: false, isRequired: true, requiresFields: 'id', isKey: false, description: 'Computed field from this subgraph' },
+    ],
+  })
+}
+
+function randomId() {
+  return Math.random().toString(36).slice(2, 9)
 }
 
 function deleteSelected() {
@@ -558,6 +664,13 @@ function importTable(table: any) {
   gap: 5px;
 }
 
+.project-hint {
+  margin-top: 8px;
+  font-size: 10px;
+  line-height: 1.45;
+  color: #6f829d;
+}
+
 .btn-ghost-sm {
   flex: 1;
   background: #18181f;
@@ -672,6 +785,21 @@ function importTable(table: any) {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.starter-block {
+  display: grid;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.starter-title {
+  color: #7f92af;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
 }
 
 .btn-primary {

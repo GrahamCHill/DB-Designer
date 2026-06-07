@@ -54,6 +54,7 @@
       <div class="field-row">
         <span class="loc-chip body">B</span>
         <span class="field-name">{{ node.requestBodyRef ? refName(node.requestBodyRef) : 'untyped' }}</span>
+        <span v-if="node.requestBodyRef" class="field-type">type</span>
         <div class="connector conn-right" :class="{ connected: !!node.requestBodyRef }"
           @mousedown.stop="$emit('start-relation', 'request-body')" />
       </div>
@@ -67,6 +68,7 @@
     <div v-for="res in node.responses" :key="res.id" class="field-row">
       <span class="status-chip" :class="statusClass(res.statusCode)">{{ res.statusCode }}</span>
       <span class="field-name">{{ res.description }}</span>
+      <span class="field-type">{{ res.bodyTypeRef ? refName(res.bodyTypeRef) : 'untyped' }}</span>
       <div class="connector conn-right" :class="{ connected: !!res.bodyTypeRef }"
         @mousedown.stop="$emit('start-relation', res.id)" />
     </div>
