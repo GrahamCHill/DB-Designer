@@ -102,8 +102,8 @@ jobs:
               const fs = require('fs');
               const config = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
               if (config.bundle && config.bundle.macOS) {
-                config.bundle.macOS.signingIdentity = null;
-                config.bundle.macOS.notarization = null;
+                delete config.bundle.macOS.signingIdentity;
+                delete config.bundle.macOS.notarization;
               }
               fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(config, null, 2));
             "
