@@ -23,6 +23,18 @@
         @edit="store.editingGroupId = group.id"
       />
 
+      <CommentNode
+        v-for="comment in store.schema.comments"
+        :key="comment.id"
+        :comment="comment"
+        :selected="store.selectedCommentId === comment.id || store.multiSelectedCommentIds.has(comment.id)"
+        @mousedown-header="startCommentDrag(comment.id, $event)"
+        @mousedown-resize="startCommentResize(comment.id, $event)"
+        @select="selectComment(comment.id, $event)"
+        @update:text="store.updateComment(comment.id, { text: $event })"
+        @delete="deleteComment(comment.id)"
+      />
+
       <!-- SVG: relations + labels (inside canvas-content so coords match) -->
       <svg class="relations-svg" xmlns="http://www.w3.org/2000/svg">
         <defs>
@@ -127,7 +139,7 @@
     </div>
 
     <!-- Empty state -->
-    <div v-if="store.schema.tables.length === 0 && store.schema.groups.length === 0" class="empty-state">
+    <div v-if="store.schema.tables.length === 0 && store.schema.groups.length === 0 && store.schema.comments.length === 0" class="empty-state">
       <div class="empty-hex">[]</div>
       <p>Canvas is empty</p>
       <span>Use the sidebar or right-click to add tables, resources, or groups</span>
@@ -143,6 +155,14 @@
     >
       <button class="context-menu-item" @click="createAtContext('table')">New Table</button>
       <button class="context-menu-item" @click="createAtContext('group')">New Group</button>
+      <button class="context-menu-item" @click="createAtContext('comment')">Comment Box</button>
+      <button
+        v-if="bridgeContextTables.length === 2"
+        class="context-menu-item"
+        @click="openBridgeTableFromSelection"
+      >Junction Table for Selected Tables</button>
+      <button class="context-menu-item" @click="createPrefabAtContext('rag')">Basic RAG System</button>
+      <button class="context-menu-item" @click="createPrefabAtContext('audit')">Basic Audit System</button>
       <button class="context-menu-item" @click="createAtContext('blob-storage')">S3 / Blob</button>
       <button class="context-menu-item" @click="createAtContext('nosql-database')">NoSQL Database</button>
       <button class="context-menu-item" @click="createAtContext('cache')">Cache</button>
@@ -160,6 +180,11 @@
         @click="store.updateRelation(store.selectedRelationId!, { type: type.value })">
         {{ type.label }}
       </button>
+      <button
+        v-if="selectedRelData.type === 'many-to-many'"
+        class="rel-type-action"
+        @click="createBridgeTable()"
+      >Create Junction Table</button>
       <button class="rel-type-del" @click="requestDeleteRelation()">Delete Relation</button>
     </div>
 
@@ -192,6 +217,14 @@
       @confirm="confirmDelete"
       @cancel="cancelDelete"
     />
+
+    <BridgeTableModal
+      v-if="bridgeModalSelection && bridgeModalSourceTable && bridgeModalTargetTable"
+      :source-table="bridgeModalSourceTable"
+      :target-table="bridgeModalTargetTable"
+      @confirm="confirmBridgeTable"
+      @cancel="bridgeModalSelection = null"
+    />
   </div>
 </template>
 
@@ -201,10 +234,12 @@ import { useSchemaStore } from '../../stores/schema'
 import TableNode from './TableNode.vue'
 import ResourceNode from './ResourceNode.vue'
 import GroupNode from './GroupNode.vue'
+import CommentNode from './CommentNode.vue'
 import MinimapPanel from './MinimapPanel.vue'
 import GroupEditorModal from '../modals/GroupEditorModal.vue'
 import ConfirmDialog from '../modals/ConfirmDialog.vue'
-import type { Relation, RelationType, ResourceNodeType } from '../../types'
+import BridgeTableModal from '../modals/BridgeTableModal.vue'
+import type { BridgeTableOptions, Relation, RelationType, ResourceNodeType } from '../../types'
 import { TABLE_WIDTH, TABLE_HEADER_H, TABLE_COL_PAD_TOP, TABLE_ROW_H } from '../../types'
 import { getDescendants } from '../../composables/useContainment'
 import { areSqlTypesCompatible } from '../../types/sqlTypes'
@@ -231,6 +266,11 @@ const confirmState = ref<null | {
   danger: boolean
   onConfirm: () => void
 }>(null)
+const bridgeModalSelection = ref<{
+  relationId?: string
+  sourceTableId: string
+  targetTableId: string
+} | null>(null)
 
 defineEmits<{
   'generate-api': [table: any]
@@ -289,6 +329,11 @@ const onKeyDown = (e: KeyboardEvent) => {
       : store.selectedGroupId
         ? [store.selectedGroupId]
         : []
+    const selectedCommentIds = store.multiSelectedCommentIds.size > 0
+      ? [...store.multiSelectedCommentIds]
+      : store.selectedCommentId
+        ? [store.selectedCommentId]
+        : []
 
     if (selectedTableIds.length > 0) {
       const message = selectedTableIds.length === 1
@@ -317,6 +362,18 @@ const onKeyDown = (e: KeyboardEvent) => {
         danger: true,
         onConfirm: () => {
           for (const groupId of selectedGroupIds) store.deleteGroup(groupId, false)
+          store.clearMultiSelection()
+        },
+      }
+    } else if (selectedCommentIds.length > 0) {
+      confirmState.value = {
+        title: 'Delete Comment',
+        message: selectedCommentIds.length === 1 ? 'Delete selected comment box?' : `Delete ${selectedCommentIds.length} selected comment box(es)?`,
+        confirmLabel: 'Delete',
+        cancelLabel: 'Cancel',
+        danger: true,
+        onConfirm: () => {
+          for (const commentId of selectedCommentIds) store.deleteComment(commentId)
           store.clearMultiSelection()
         },
       }
@@ -423,6 +480,33 @@ type GroupDrag = {
   subtreeTableOrigPos: Record<string, { x: number; y: number }>  // table id â†’ orig pos
 }
 
+type MultiTableDrag = {
+  kind: 'multi-table'
+  tableOrigPos: Record<string, { x: number; y: number }>
+}
+
+type CommentDrag = {
+  kind: 'comment'
+  id: string
+  origX: number; origY: number
+}
+
+type CommentResizeDrag = {
+  kind: 'comment-resize'
+  id: string
+  origW: number; origH: number
+}
+
+type MultiGroupDrag = {
+  kind: 'multi-group'
+  groupOrigPos: Record<string, { x: number; y: number }>
+  groupOwnedTablesBefore: Record<string, string[]>
+  groupOwnedGroupsBefore: Record<string, string[]>
+  groupSubtreeGroupOrigPos: Record<string, Record<string, { x: number; y: number }>>
+  groupSubtreeTableOrigPos: Record<string, Record<string, { x: number; y: number }>>
+  standaloneTableOrigPos: Record<string, { x: number; y: number }>
+}
+
 type ResizeDrag = {
   kind: 'resize'
   id: string
@@ -438,7 +522,7 @@ type RelationWaypointDrag = {
 
 type PanDrag = { kind: 'pan' }
 
-type AnyDrag = (TableDrag | TableResizeDrag | GroupDrag | ResizeDrag | RelationWaypointDrag | PanDrag) & {
+type AnyDrag = (TableDrag | TableResizeDrag | CommentDrag | CommentResizeDrag | GroupDrag | MultiTableDrag | MultiGroupDrag | ResizeDrag | RelationWaypointDrag | PanDrag) & {
   startClientX: number
   startClientY: number
 }
@@ -674,6 +758,54 @@ function cancelDelete() {
   confirmState.value = null
 }
 
+function createBridgeTable() {
+  bridgeModalSelection.value = selectedRelData.value?.type === 'many-to-many'
+    ? {
+        relationId: selectedRelData.value.id,
+        sourceTableId: selectedRelData.value.sourceTableId,
+        targetTableId: selectedRelData.value.targetTableId,
+      }
+    : null
+}
+
+const bridgeContextTables = computed(() => {
+  const selectedIds = store.multiSelectedTableIds.size > 0
+    ? [...store.multiSelectedTableIds]
+    : store.selectedTableId
+      ? [store.selectedTableId]
+      : []
+  return selectedIds
+    .map(id => store.schema.tables.find(table => table.id === id) ?? null)
+    .filter((table): table is NonNullable<typeof table> => !!table && (table.kind ?? 'table') === 'table')
+})
+
+const bridgeModalSourceTable = computed(() =>
+  store.schema.tables.find(table => table.id === bridgeModalSelection.value?.sourceTableId) ?? null
+)
+
+const bridgeModalTargetTable = computed(() =>
+  store.schema.tables.find(table => table.id === bridgeModalSelection.value?.targetTableId) ?? null
+)
+
+function confirmBridgeTable(options: BridgeTableOptions) {
+  const selection = bridgeModalSelection.value
+  bridgeModalSelection.value = null
+  if (!selection) return
+  const created = selection.relationId
+    ? store.createBridgeTableForRelation(selection.relationId, options)
+    : store.createBridgeTableBetweenTables(selection.sourceTableId, selection.targetTableId, options)
+  if (!created) alert('Could not generate a junction table for this relation.')
+}
+
+function openBridgeTableFromSelection() {
+  if (bridgeContextTables.value.length !== 2) return
+  bridgeModalSelection.value = {
+    sourceTableId: bridgeContextTables.value[0].id,
+    targetTableId: bridgeContextTables.value[1].id,
+  }
+  contextMenu.value = null
+}
+
 const relationValidationById = computed(() => {
   const map = new Map<string, {
     hasError: boolean
@@ -885,6 +1017,82 @@ function closeGroupEditor() {
 
 // â”€â”€ Canvas mouse down â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+function buildMultiTableDrag(tableIds: string[], e: MouseEvent): AnyDrag | null {
+  const tableOrigPos: Record<string, { x: number; y: number }> = {}
+  for (const tableId of tableIds) {
+    const table = store.schema.tables.find(entry => entry.id === tableId)
+    if (!table) continue
+    tableOrigPos[tableId] = { x: table.position.x, y: table.position.y }
+  }
+  if (Object.keys(tableOrigPos).length < 2) return null
+  return {
+    kind: 'multi-table',
+    tableOrigPos,
+    startClientX: e.clientX,
+    startClientY: e.clientY,
+  }
+}
+
+function buildMultiGroupDrag(groupIds: string[], tableIds: string[], e: MouseEvent): AnyDrag | null {
+  const selectedGroupSet = new Set(groupIds)
+  const groupOrigPos: Record<string, { x: number; y: number }> = {}
+  const groupOwnedTablesBefore: Record<string, string[]> = {}
+  const groupOwnedGroupsBefore: Record<string, string[]> = {}
+  const groupSubtreeGroupOrigPos: Record<string, Record<string, { x: number; y: number }>> = {}
+  const groupSubtreeTableOrigPos: Record<string, Record<string, { x: number; y: number }>> = {}
+  const coveredTableIds = new Set<string>()
+
+  for (const groupId of groupIds) {
+    const group = store.schema.groups.find(entry => entry.id === groupId)
+    if (!group) continue
+    groupOrigPos[groupId] = { x: group.position.x, y: group.position.y }
+    const descGroupIds = getDescendants(groupId, store.schema.groups)
+    const subtreeGroupOrig: Record<string, { x: number; y: number }> = {}
+    const subtreeTableOrig: Record<string, { x: number; y: number }> = {}
+    for (const entry of store.schema.groups) {
+      if (descGroupIds.has(entry.id)) {
+        subtreeGroupOrig[entry.id] = { x: entry.position.x, y: entry.position.y }
+      }
+    }
+    const subtreeIds = new Set([groupId, ...descGroupIds])
+    for (const table of store.schema.tables) {
+      if (table.groupId && subtreeIds.has(table.groupId)) {
+        subtreeTableOrig[table.id] = { x: table.position.x, y: table.position.y }
+        coveredTableIds.add(table.id)
+      }
+    }
+    groupSubtreeGroupOrigPos[groupId] = subtreeGroupOrig
+    groupSubtreeTableOrigPos[groupId] = subtreeTableOrig
+    groupOwnedTablesBefore[groupId] = Object.keys(subtreeTableOrig)
+    groupOwnedGroupsBefore[groupId] = store.schema.groups
+      .filter(entry => entry.parentGroupId === groupId && !selectedGroupSet.has(entry.id))
+      .map(entry => entry.id)
+  }
+
+  const standaloneTableOrigPos: Record<string, { x: number; y: number }> = {}
+  for (const tableId of tableIds) {
+    if (coveredTableIds.has(tableId)) continue
+    const table = store.schema.tables.find(entry => entry.id === tableId)
+    if (!table) continue
+    standaloneTableOrigPos[tableId] = { x: table.position.x, y: table.position.y }
+  }
+
+  if (Object.keys(groupOrigPos).length === 0) return null
+  if (Object.keys(groupOrigPos).length + Object.keys(standaloneTableOrigPos).length < 2) return null
+
+  return {
+    kind: 'multi-group',
+    groupOrigPos,
+    groupOwnedTablesBefore,
+    groupOwnedGroupsBefore,
+    groupSubtreeGroupOrigPos,
+    groupSubtreeTableOrigPos,
+    standaloneTableOrigPos,
+    startClientX: e.clientX,
+    startClientY: e.clientY,
+  }
+}
+
 function onCanvasMouseDown(e: MouseEvent) {
   contextMenu.value = null
   if (props.readOnly) return
@@ -898,6 +1106,7 @@ function onCanvasMouseDown(e: MouseEvent) {
     store.selectedTableId    = null
     store.selectedRelationId = null
     store.selectedGroupId    = null
+    store.selectedCommentId  = null
     store.clearMultiSelection()
     drag.value = { kind: 'pan', startClientX: e.clientX, startClientY: e.clientY }
   }
@@ -927,8 +1136,19 @@ function onMouseMove(e: MouseEvent) {
   } else if (d.kind === 'table') {
     store.updateTablePosition(d.id, { x: d.origX + dx, y: d.origY + dy })
 
+  } else if (d.kind === 'comment') {
+    store.updateCommentPosition(d.id, { x: d.origX + dx, y: d.origY + dy })
+
+  } else if (d.kind === 'multi-table') {
+    for (const [tableId, orig] of Object.entries(d.tableOrigPos)) {
+      store.updateTablePosition(tableId, { x: orig.x + dx, y: orig.y + dy })
+    }
+
   } else if (d.kind === 'table-resize') {
     store.updateTableWidth(d.id, Math.max(240, d.origW + dx))
+
+  } else if (d.kind === 'comment-resize') {
+    store.updateCommentSize(d.id, { w: d.origW + dx, h: d.origH + dy })
 
   } else if (d.kind === 'group') {
     // Move this group
@@ -940,6 +1160,20 @@ function onMouseMove(e: MouseEvent) {
     // Move all tables that were inside the subtree at drag-start
     for (const [tid, orig] of Object.entries(d.subtreeTableOrigPos)) {
       store.updateTablePosition(tid, { x: orig.x + dx, y: orig.y + dy })
+    }
+
+  } else if (d.kind === 'multi-group') {
+    for (const [groupId, orig] of Object.entries(d.groupOrigPos)) {
+      store.updateGroupPosition(groupId, { x: orig.x + dx, y: orig.y + dy })
+      for (const [nestedGroupId, nestedOrig] of Object.entries(d.groupSubtreeGroupOrigPos[groupId] ?? {})) {
+        store.updateGroupPosition(nestedGroupId, { x: nestedOrig.x + dx, y: nestedOrig.y + dy })
+      }
+      for (const [tableId, tableOrig] of Object.entries(d.groupSubtreeTableOrigPos[groupId] ?? {})) {
+        store.updateTablePosition(tableId, { x: tableOrig.x + dx, y: tableOrig.y + dy })
+      }
+    }
+    for (const [tableId, orig] of Object.entries(d.standaloneTableOrigPos)) {
+      store.updateTablePosition(tableId, { x: orig.x + dx, y: orig.y + dy })
     }
 
   } else if (d.kind === 'resize') {
@@ -956,17 +1190,6 @@ function onMouseMove(e: MouseEvent) {
 
 function openContextMenu(e: MouseEvent) {
   if (props.readOnly) return
-  const target = e.target as HTMLElement
-  const isBackground =
-    target === canvasEl.value ||
-    target.classList.contains('canvas-content') ||
-    target.classList.contains('relations-svg')
-
-  if (!isBackground) {
-    contextMenu.value = null
-    return
-  }
-
   const pos = toCanvas(e.clientX, e.clientY)
   const rect = canvasEl.value!.getBoundingClientRect()
   contextMenu.value = {
@@ -977,13 +1200,26 @@ function openContextMenu(e: MouseEvent) {
   }
 }
 
-function createAtContext(kind: 'table' | 'group' | ResourceNodeType) {
+function createAtContext(kind: 'table' | 'group' | 'comment' | ResourceNodeType) {
   if (!contextMenu.value) return
   const position = { x: contextMenu.value.canvasX, y: contextMenu.value.canvasY }
   if (kind === 'table') store.createTable(position)
   else if (kind === 'group') store.createGroup(position)
+  else if (kind === 'comment') store.createComment(position)
   else store.createResource(kind, position)
   contextMenu.value = null
+}
+
+function createPrefabAtContext(kind: 'rag' | 'audit') {
+  if (!contextMenu.value) return
+  const position = { x: contextMenu.value.canvasX, y: contextMenu.value.canvasY }
+  if (kind === 'rag') store.createRagSystem(position)
+  else store.createAuditSystem(position)
+  contextMenu.value = null
+}
+
+function deleteComment(commentId: string) {
+  store.deleteComment(commentId)
 }
 
 function pasteAtContext() {
@@ -1004,8 +1240,15 @@ function commitActiveDrag() {
     const table = store.schema.tables.find(t => t.id === d.id)
     if (table) store.updateTablePosition(d.id, table.position, true)
 
+  } else if (d.kind === 'comment') {
+    const comment = store.schema.comments.find(entry => entry.id === d.id)
+    if (comment) store.updateCommentPosition(d.id, comment.position, true)
+
   } else if (d.kind === 'table-resize') {
     store.commitTableWidth()
+
+  } else if (d.kind === 'comment-resize') {
+    store.commitCommentSize()
 
   } else if (d.kind === 'group') {
     // S1: apply group drop â€” only reassigns owned items, never steals
@@ -1068,6 +1311,29 @@ function onMinimapNavigate(x: number, y: number) { pan.x = x; pan.y = y }
 
 function startTableDrag(tableId: string, e: MouseEvent) {
   const table = store.schema.tables.find(t => t.id === tableId)!
+  const selectedTableIds = store.multiSelectedTableIds.size > 0
+    ? [...store.multiSelectedTableIds]
+    : store.selectedTableId
+      ? [store.selectedTableId]
+      : []
+  const selectedGroupIds = store.multiSelectedGroupIds.size > 0
+    ? [...store.multiSelectedGroupIds]
+    : store.selectedGroupId
+      ? [store.selectedGroupId]
+      : []
+  if (
+    (selectedTableIds.includes(tableId) && selectedTableIds.length > 1) ||
+    (selectedTableIds.includes(tableId) && selectedGroupIds.length > 0)
+  ) {
+    const dragSelection = selectedGroupIds.length > 0
+      ? buildMultiGroupDrag(selectedGroupIds, selectedTableIds, e)
+      : buildMultiTableDrag(selectedTableIds, e)
+    if (dragSelection) {
+      drag.value = dragSelection
+      return
+    }
+  }
+
   selectTable(tableId)
   drag.value = {
     kind: 'table', id: tableId,
@@ -1086,6 +1352,34 @@ function startTableResize(tableId: string, e: MouseEvent) {
   }
 }
 
+function startCommentDrag(commentId: string, e: MouseEvent) {
+  const comment = store.schema.comments.find(entry => entry.id === commentId)
+  if (!comment) return
+  selectComment(commentId)
+  drag.value = {
+    kind: 'comment',
+    id: commentId,
+    origX: comment.position.x,
+    origY: comment.position.y,
+    startClientX: e.clientX,
+    startClientY: e.clientY,
+  }
+}
+
+function startCommentResize(commentId: string, e: MouseEvent) {
+  const comment = store.schema.comments.find(entry => entry.id === commentId)
+  if (!comment) return
+  selectComment(commentId)
+  drag.value = {
+    kind: 'comment-resize',
+    id: commentId,
+    origW: comment.size.w,
+    origH: comment.size.h,
+    startClientX: e.clientX,
+    startClientY: e.clientY,
+  }
+}
+
 function selectTable(id: string, event?: MouseEvent) {
   if (event && (event.ctrlKey || event.metaKey || event.shiftKey)) {
     store.toggleTableSelection(id)
@@ -1095,12 +1389,43 @@ function selectTable(id: string, event?: MouseEvent) {
   store.selectedTableId    = id
   store.selectedRelationId = null
   store.selectedGroupId    = null
+  store.selectedCommentId  = null
+}
+
+function selectComment(id: string, event?: MouseEvent) {
+  if (event && (event.ctrlKey || event.metaKey || event.shiftKey)) {
+    store.toggleCommentSelection(id)
+    return
+  }
+  store.clearMultiSelection()
+  store.selectedCommentId  = id
+  store.selectedTableId    = null
+  store.selectedGroupId    = null
+  store.selectedRelationId = null
 }
 
 // â”€â”€ Group drag â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function startGroupDrag(groupId: string, e: MouseEvent) {
   const group = store.schema.groups.find(g => g.id === groupId)!
+  const selectedTableIds = store.multiSelectedTableIds.size > 0
+    ? [...store.multiSelectedTableIds]
+    : store.selectedTableId
+      ? [store.selectedTableId]
+      : []
+  const selectedGroupIds = store.multiSelectedGroupIds.size > 0
+    ? [...store.multiSelectedGroupIds]
+    : store.selectedGroupId
+      ? [store.selectedGroupId]
+      : []
+  if (selectedGroupIds.includes(groupId) && (selectedGroupIds.length > 1 || selectedTableIds.length > 0)) {
+    const dragSelection = buildMultiGroupDrag(selectedGroupIds, selectedTableIds, e)
+    if (dragSelection) {
+      drag.value = dragSelection
+      return
+    }
+  }
+
   selectGroup(groupId)
 
   // Collect the full subtree of descendant group IDs (not including self)
@@ -1151,6 +1476,7 @@ function selectGroup(id: string, event?: MouseEvent) {
   store.selectedGroupId    = id
   store.selectedTableId    = null
   store.selectedRelationId = null
+  store.selectedCommentId  = null
 }
 
 // â”€â”€ Group resize â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1258,6 +1584,7 @@ function selectRelation(id: string) {
   store.selectedRelationId = id
   store.selectedTableId    = null
   store.selectedGroupId    = null
+  store.selectedCommentId  = null
 }
 </script>
 
@@ -1379,6 +1706,17 @@ function selectRelation(id: string) {
   margin-left: 6px; transition: background 0.15s;
 }
 .rel-type-del:hover { background: #EF444415; }
+.rel-type-action {
+  background: #3ECF8E20;
+  border: 1px solid #3ECF8E40;
+  color: #3ECF8E;
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rel-type-action:hover { background: #3ECF8E2d; }
 
 .zoom-controls {
   position: absolute; bottom: 20px; right: 20px;

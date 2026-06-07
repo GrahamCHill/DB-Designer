@@ -7,8 +7,11 @@ import type {
   Column,
   Relation,
   TableGroup,
+  CommentBox,
   SQLDialect,
   ResourceNodeType,
+  BridgeTableOptions,
+  BridgeTableUseCase,
 } from '../types'
 import { TABLE_WIDTH, TABLE_HEADER_H, TABLE_COL_PAD_TOP, TABLE_ROW_H } from '../types'
 import { canonicalSqlType, normalizeSqlType } from '../types/sqlTypes'
@@ -125,7 +128,7 @@ export const useSchemaStore = defineStore('schema', () => {
 
   const schema = computed<Schema>(() =>
     tabsStore.activeSchema ?? {
-      id: '', name: '', dialect: 'postgresql', tables: [], relations: [], groups: [],
+      id: '', name: '', dialect: 'postgresql', tables: [], relations: [], groups: [], comments: [],
       createdAt: '', updatedAt: '',
     }
   )
@@ -273,9 +276,11 @@ export const useSchemaStore = defineStore('schema', () => {
   const selectedTableId    = ref<string | null>(null)
   const selectedRelationId = ref<string | null>(null)
   const selectedGroupId    = ref<string | null>(null)
+  const selectedCommentId  = ref<string | null>(null)
   const multiSelectedTableIds = ref<Set<string>>(new Set())
   const multiSelectedGroupIds = ref<Set<string>>(new Set())
-  const copiedCanvasSelection = ref<{ tableIds: string[]; groupIds: string[] } | null>(null)
+  const multiSelectedCommentIds = ref<Set<string>>(new Set())
+  const copiedCanvasSelection = ref<{ tableIds: string[]; groupIds: string[]; commentIds: string[] } | null>(null)
   const editingTableId     = ref<string | null>(null)
   const editingGroupId     = ref<string | null>(null)
   const draftTableIds      = ref<Set<string>>(new Set())
@@ -285,19 +290,22 @@ export const useSchemaStore = defineStore('schema', () => {
 
   const selectedTable = computed(() => schema.value.tables.find(t => t.id === selectedTableId.value) ?? null)
   const selectedGroup = computed(() => schema.value.groups.find(g => g.id === selectedGroupId.value) ?? null)
+  const selectedComment = computed(() => schema.value.comments.find(comment => comment.id === selectedCommentId.value) ?? null)
   const sqlTables = computed(() => schema.value.tables.filter(table => (table.kind ?? 'table') === 'table'))
   const resourceTables = computed(() => schema.value.tables.filter(table => (table.kind ?? 'table') === 'resource'))
 
   function clearSelection() {
-    selectedTableId.value = selectedRelationId.value = selectedGroupId.value =
+    selectedTableId.value = selectedRelationId.value = selectedGroupId.value = selectedCommentId.value =
       editingTableId.value = editingGroupId.value = null
     multiSelectedTableIds.value = new Set()
     multiSelectedGroupIds.value = new Set()
+    multiSelectedCommentIds.value = new Set()
   }
 
   function clearMultiSelection() {
     multiSelectedTableIds.value = new Set()
     multiSelectedGroupIds.value = new Set()
+    multiSelectedCommentIds.value = new Set()
   }
 
   function uniqueCopyName(name: string, existingNames: string[]) {
@@ -312,11 +320,227 @@ export const useSchemaStore = defineStore('schema', () => {
     return candidate
   }
 
+  function uniqueTableName(baseName: string) {
+    const existingNames = sc().tables.map(table => table.name)
+    if (!existingNames.some(name => name.toLowerCase() === baseName.toLowerCase())) return baseName
+    return uniqueCopyName(baseName, existingNames)
+  }
+
+  function uniqueColumnNameForTable(table: Table, baseName: string) {
+    const existing = new Set(table.columns.map(column => column.name.toLowerCase()))
+    if (!existing.has(baseName.toLowerCase())) return baseName
+    let index = 2
+    let candidate = `${baseName}_${index}`
+    while (existing.has(candidate.toLowerCase())) {
+      index++
+      candidate = `${baseName}_${index}`
+    }
+    return candidate
+  }
+
+  function bridgeColumnName(tableName: string, columnName: string) {
+    return `${tableName}_${columnName}`
+      .replace(/[^a-zA-Z0-9_]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .toLowerCase()
+  }
+
+  function bridgeTemplateColumns(
+    useCase: BridgeTableUseCase,
+    dialect: SQLDialect,
+  ): Array<Omit<Column, 'id'>> {
+    const timestampType = dialect === 'postgresql'
+      ? 'TIMESTAMPTZ'
+      : dialect === 'sqlserver'
+        ? 'DATETIME2'
+        : 'DATETIME'
+    const nowValue = dialect === 'postgresql'
+      ? 'NOW()'
+      : dialect === 'sqlserver'
+        ? 'SYSDATETIME()'
+        : 'CURRENT_TIMESTAMP'
+
+    switch (useCase) {
+      case 'membership':
+        return [
+          { name: 'role', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Membership role or access level.' },
+          { name: 'joined_at', type: timestampType, dialectTypes: { [dialect]: timestampType }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: nowValue, comment: 'When the member relationship started.' },
+        ]
+      case 'line-items':
+        return [
+          { name: 'quantity', type: 'INTEGER', dialectTypes: { [dialect]: normalizeSqlType('INTEGER', dialect) }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '1', comment: 'Number of referenced items.' },
+          { name: 'unit_price', type: 'DECIMAL', dialectTypes: { [dialect]: normalizeSqlType('DECIMAL', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Captured price per item at the time of association.' },
+        ]
+      case 'enrollment':
+        return [
+          { name: 'status', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: "'active'", comment: 'Enrollment lifecycle state.' },
+          { name: 'enrolled_at', type: timestampType, dialectTypes: { [dialect]: timestampType }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: nowValue, comment: 'When the enrollment was created.' },
+        ]
+      case 'assignment':
+        return [
+          { name: 'assigned_at', type: timestampType, dialectTypes: { [dialect]: timestampType }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: nowValue, comment: 'When the assignment was made.' },
+          { name: 'assignment_note', type: 'TEXT', dialectTypes: { [dialect]: normalizeSqlType('TEXT', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Optional context for the assignment.' },
+        ]
+      case 'vector-rag':
+        return [
+          { name: 'chunk_index', type: 'INTEGER', dialectTypes: { [dialect]: normalizeSqlType('INTEGER', dialect) }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '0', comment: 'Chunk order within the source document or record.' },
+          { name: 'content_text', type: 'TEXT', dialectTypes: { [dialect]: normalizeSqlType('TEXT', dialect) }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Normalized chunk text used for retrieval and answer grounding.' },
+          { name: 'embedding_vector', type: dialect === 'postgresql' ? 'VECTOR' : 'TEXT', dialectTypes: { [dialect]: dialect === 'postgresql' ? 'VECTOR' : 'TEXT' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Embedding payload or vector reference for semantic search.' },
+          { name: 'metadata_json', type: dialect === 'postgresql' ? 'JSONB' : 'JSON', dialectTypes: { [dialect]: normalizeSqlType(dialect === 'postgresql' ? 'JSONB' : 'JSON', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? "'{}'" : dialect === 'mysql' ? "'{}'" : '', comment: 'Chunk metadata such as source page, PDF name, section, tags, or tenant.' },
+          { name: 'source_uri', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Original file, object store, or canonical URI for this source.' },
+        ]
+      case 'audit-trail':
+        return [
+          { name: 'event_type', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Created, updated, deleted, approved, or other domain event.' },
+          { name: 'changed_at', type: timestampType, dialectTypes: { [dialect]: timestampType }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: nowValue, comment: 'When the audited change was recorded.' },
+          { name: 'changed_by', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'User, service account, or system actor that made the change.' },
+          { name: 'change_summary', type: 'TEXT', dialectTypes: { [dialect]: normalizeSqlType('TEXT', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Human-readable summary of what changed.' },
+          { name: 'change_payload', type: dialect === 'postgresql' ? 'JSONB' : 'JSON', dialectTypes: { [dialect]: normalizeSqlType(dialect === 'postgresql' ? 'JSONB' : 'JSON', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? "'{}'" : dialect === 'mysql' ? "'{}'" : '', comment: 'Structured before/after values, request metadata, or compliance details.' },
+        ]
+      default:
+        return []
+    }
+  }
+
+  function bridgeUseCaseComment(useCase: BridgeTableUseCase, sourceName: string, targetName: string, notes?: string) {
+    const base = {
+      generic: `Bridge table linking ${sourceName} and ${targetName}.`,
+      membership: `Membership bridge tracking how ${sourceName} connect to ${targetName}.`,
+      'line-items': `Line-item bridge linking ${sourceName} to ${targetName}.`,
+      enrollment: `Enrollment bridge connecting ${sourceName} with ${targetName}.`,
+      assignment: `Assignment bridge mapping ${sourceName} to ${targetName}.`,
+      'vector-rag': `Vector/RAG bridge linking ${sourceName} to ${targetName} with chunk, embedding, and retrieval metadata.`,
+      'audit-trail': `Audit bridge recording change history between ${sourceName} and ${targetName}.`,
+    }[useCase]
+    return notes?.trim() ? `${base} ${notes.trim()}` : base
+  }
+
+  function preferredReferenceColumn(table: Table, preferredColumnId: string) {
+    const primaryKeys = table.columns.filter(column => column.primaryKey)
+    if (primaryKeys.length > 0) {
+      return primaryKeys.find(column => column.id === preferredColumnId) ?? primaryKeys[0]
+    }
+
+    const uniqueColumns = table.columns.filter(column => column.unique)
+    if (uniqueColumns.length > 0) {
+      return uniqueColumns.find(column => column.id === preferredColumnId) ?? uniqueColumns[0]
+    }
+
+    return table.columns.find(column => column.id === preferredColumnId) ?? table.columns[0] ?? null
+  }
+
+  function makeDefaultIdColumn(dialect: SQLDialect): Column {
+    const idType = defaultUuidTypeForDialect(dialect)
+    return {
+      id: uuidv4(),
+      name: 'id',
+      type: idType,
+      dialectTypes: { [dialect]: idType },
+      nullable: false,
+      primaryKey: true,
+      unique: true,
+      immutable: false,
+      defaultValue: defaultUuidValueForDialect(dialect, idType),
+      comment: '',
+    }
+  }
+
+  function createSystemTable(
+    name: string,
+    position: { x: number; y: number },
+    columns: Array<Omit<Column, 'id'>>,
+    comment = '',
+    groupId: string | null = null,
+  ) {
+    const s = sc()
+    const dialect = s.dialect ?? 'postgresql'
+    const table: Table = {
+      id: uuidv4(),
+      kind: 'table',
+      resourceType: null,
+      name: uniqueTableName(name),
+      comment,
+      color: DEFAULT_COLORS[s.tables.length % DEFAULT_COLORS.length],
+      position,
+      groupId,
+      groupLocked: false,
+      immutable: false,
+      width: TABLE_WIDTH,
+      columns: [
+        makeDefaultIdColumn(dialect),
+        ...columns.map(column => ({
+          ...column,
+          id: uuidv4(),
+        })),
+      ],
+    }
+    s.tables.push(table)
+    return table
+  }
+
+  function appendReferenceColumn(
+    table: Table,
+    referencedTable: Table,
+    referencedColumn: Column,
+    dialect: SQLDialect,
+    explicitName?: string,
+  ) {
+    const name = uniqueColumnNameForTable(
+      table,
+      explicitName ?? bridgeColumnName(referencedTable.name, referencedColumn.name),
+    )
+    const column = withDialectMemory({
+      id: uuidv4(),
+      name,
+      type: referencedColumn.type,
+      dialectTypes: {
+        ...(referencedColumn.dialectTypes ?? {}),
+        [dialect]: normalizeSqlType(referencedColumn.type, dialect),
+      },
+      nullable: false,
+      primaryKey: false,
+      unique: false,
+      immutable: false,
+      defaultValue: '',
+      comment: `References ${referencedTable.name}.${referencedColumn.name}`,
+    }, dialect)
+    table.columns.push(column)
+    return column
+  }
+
+  function addReferenceRelation(
+    referencedTable: Table,
+    referencedColumn: Column,
+    owningTable: Table,
+    owningColumn: Column,
+    label = '',
+  ) {
+    sc().relations.push({
+      id: uuidv4(),
+      sourceTableId: referencedTable.id,
+      sourceColumnId: referencedColumn.id,
+      targetTableId: owningTable.id,
+      targetColumnId: owningColumn.id,
+      type: 'one-to-many',
+      label,
+      waypoints: [],
+    })
+  }
+
+  function preferredReferenceColumnByTableId(tableId: string, preferredColumnId?: string | null) {
+    const table = sc().tables.find(entry => entry.id === tableId)
+    if (!table || (table.kind ?? 'table') !== 'table') return null
+    return {
+      table,
+      column: preferredReferenceColumn(table, preferredColumnId ?? ''),
+    }
+  }
+
   // Tables
 
   function createTable(position = { x: 100, y: 100 }, groupId: string | null = null) {
     const s = sc()
-    const idType = defaultUuidTypeForDialect(s.dialect ?? 'postgresql')
     const table: Table = {
       id: uuidv4(),
       kind: 'table',
@@ -328,18 +552,7 @@ export const useSchemaStore = defineStore('schema', () => {
       groupLocked: false,
       immutable: false,
       width: TABLE_WIDTH,
-      columns: [{
-        id: uuidv4(),
-        name: 'id',
-        type: idType,
-        dialectTypes: { [s.dialect ?? 'postgresql']: idType },
-        nullable: false,
-        primaryKey: true,
-        unique: true,
-        immutable: false,
-        defaultValue: defaultUuidValueForDialect(s.dialect ?? 'postgresql', idType),
-        comment: '',
-      }],
+      columns: [makeDefaultIdColumn(s.dialect ?? 'postgresql')],
     }
     s.tables.push(table)
     draftTableIds.value = new Set([...draftTableIds.value, table.id])
@@ -513,6 +726,186 @@ export const useSchemaStore = defineStore('schema', () => {
     persist()
   }
 
+  function createBridgeTableBetweenTables(
+    sourceTableId: string,
+    targetTableId: string,
+    options: BridgeTableOptions,
+    preferredSourceColumnId?: string | null,
+    preferredTargetColumnId?: string | null,
+  ) {
+    const s = sc()
+    const sourceRef = preferredReferenceColumnByTableId(sourceTableId, preferredSourceColumnId)
+    const targetRef = preferredReferenceColumnByTableId(targetTableId, preferredTargetColumnId)
+    if (!sourceRef || !targetRef || !sourceRef.column || !targetRef.column) return null
+
+    const sourceTable = sourceRef.table
+    const targetTable = targetRef.table
+    const sourceColumn = sourceRef.column
+    const targetColumn = targetRef.column
+    const groupId = sourceTable.groupId && sourceTable.groupId === targetTable.groupId ? sourceTable.groupId : null
+    const dialect = s.dialect ?? 'postgresql'
+    const sourceTableWidth = sourceTable.width ?? TABLE_WIDTH
+    const targetTableWidth = targetTable.width ?? TABLE_WIDTH
+    const bridgeX = Math.max(
+      sourceTable.position.x + sourceTableWidth,
+      targetTable.position.x + targetTableWidth,
+    ) + 140
+    const bridgeY = Math.round((sourceTable.position.y + targetTable.position.y) / 2)
+    const bridgeTable: Table = {
+      id: uuidv4(),
+      kind: 'table',
+      resourceType: null,
+      name: uniqueTableName(options.tableName?.trim() || `${sourceTable.name}_${targetTable.name}`),
+      comment: bridgeUseCaseComment(options.useCase, sourceTable.name, targetTable.name, options.notes),
+      color: DEFAULT_COLORS[s.tables.length % DEFAULT_COLORS.length],
+      position: { x: bridgeX, y: bridgeY },
+      groupId,
+      groupLocked: false,
+      immutable: false,
+      width: TABLE_WIDTH,
+      columns: [makeDefaultIdColumn(dialect)],
+    }
+    const bridgeSourceColumn = appendReferenceColumn(bridgeTable, sourceTable, sourceColumn, dialect)
+    const bridgeTargetColumn = appendReferenceColumn(bridgeTable, targetTable, targetColumn, dialect)
+    for (const template of bridgeTemplateColumns(options.useCase, dialect)) {
+      bridgeTable.columns.push({
+        ...template,
+        id: uuidv4(),
+      })
+    }
+
+    s.tables.push(bridgeTable)
+    draftTableIds.value = new Set([...draftTableIds.value, bridgeTable.id])
+    addReferenceRelation(sourceTable, sourceColumn, bridgeTable, bridgeSourceColumn)
+    addReferenceRelation(targetTable, targetColumn, bridgeTable, bridgeTargetColumn)
+
+    selectedRelationId.value = null
+    selectedTableId.value = bridgeTable.id
+    editingTableId.value = bridgeTable.id
+    clearMultiSelection()
+    persist(false)
+    return bridgeTable
+  }
+
+  function createBridgeTableForRelation(relationId: string, options: BridgeTableOptions) {
+    const relation = sc().relations.find(entry => entry.id === relationId)
+    if (!relation || relation.type !== 'many-to-many') return null
+    sc().relations = sc().relations.filter(entry => entry.id !== relationId)
+    return createBridgeTableBetweenTables(
+      relation.sourceTableId,
+      relation.targetTableId,
+      options,
+      relation.sourceColumnId,
+      relation.targetColumnId,
+    )
+  }
+
+  function createRagSystem(position = { x: 100, y: 100 }) {
+    const s = sc()
+    const dialect = s.dialect ?? 'postgresql'
+    const docTable = createSystemTable(
+      'knowledge_documents',
+      position,
+      [
+        { name: 'title', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Display title for the document, file, PDF, note, or record set.' },
+        { name: 'source_uri', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: true, primaryKey: false, unique: true, immutable: false, defaultValue: '', comment: 'Original object store path, URL, S3 key, or canonical file location.' },
+        { name: 'mime_type', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Document type such as application/pdf, text/markdown, or text/html.' },
+        { name: 'metadata_json', type: dialect === 'postgresql' ? 'JSONB' : 'JSON', dialectTypes: { [dialect]: normalizeSqlType(dialect === 'postgresql' ? 'JSONB' : 'JSON', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? "'{}'" : dialect === 'mysql' ? "'{}'" : '', comment: 'Shared metadata such as tenant, tags, ingestion labels, or source system identifiers.' },
+      ],
+      'Source documents for multi-file and multi-PDF retrieval.'
+    )
+    const chunkTable = createSystemTable(
+      'document_chunks',
+      { x: position.x + 420, y: position.y + 40 },
+      [
+        { name: 'chunk_index', type: 'INTEGER', dialectTypes: { [dialect]: normalizeSqlType('INTEGER', dialect) }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '0', comment: 'Chunk order inside the source document.' },
+        { name: 'page_number', type: 'INTEGER', dialectTypes: { [dialect]: normalizeSqlType('INTEGER', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Page number for PDFs or other paginated sources.' },
+        { name: 'content_text', type: 'TEXT', dialectTypes: { [dialect]: normalizeSqlType('TEXT', dialect) }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Normalized chunk text that will be embedded and cited in answers.' },
+        { name: 'embedding_vector', type: dialect === 'postgresql' ? 'VECTOR' : 'TEXT', dialectTypes: { [dialect]: dialect === 'postgresql' ? 'VECTOR' : 'TEXT' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Stored embedding, vector reference, or serialized embedding payload.' },
+        { name: 'token_count', type: 'INTEGER', dialectTypes: { [dialect]: normalizeSqlType('INTEGER', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Approximate chunk token count for packing and retrieval tuning.' },
+        { name: 'metadata_json', type: dialect === 'postgresql' ? 'JSONB' : 'JSON', dialectTypes: { [dialect]: normalizeSqlType(dialect === 'postgresql' ? 'JSONB' : 'JSON', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? "'{}'" : dialect === 'mysql' ? "'{}'" : '', comment: 'Per-chunk metadata such as headings, bounding boxes, speaker, table region, or extraction quality.' },
+      ],
+      'Chunked document content for vector search and grounding.'
+    )
+    const queryTable = createSystemTable(
+      'rag_queries',
+      { x: position.x, y: position.y + 280 },
+      [
+        { name: 'query_text', type: 'TEXT', dialectTypes: { [dialect]: normalizeSqlType('TEXT', dialect) }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'User or system prompt used for retrieval.' },
+        { name: 'query_embedding', type: dialect === 'postgresql' ? 'VECTOR' : 'TEXT', dialectTypes: { [dialect]: dialect === 'postgresql' ? 'VECTOR' : 'TEXT' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Optional query embedding for semantic retrieval tracing.' },
+        { name: 'created_at', type: dialect === 'postgresql' ? 'TIMESTAMPTZ' : dialect === 'sqlserver' ? 'DATETIME2' : 'DATETIME', dialectTypes: { [dialect]: dialect === 'postgresql' ? 'TIMESTAMPTZ' : dialect === 'sqlserver' ? 'DATETIME2' : 'DATETIME' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? 'NOW()' : dialect === 'sqlserver' ? 'SYSDATETIME()' : 'CURRENT_TIMESTAMP', comment: 'When the query was issued.' },
+      ],
+      'Captured retrieval queries and prompts.'
+    )
+    const resultTable = createSystemTable(
+      'rag_query_results',
+      { x: position.x + 420, y: position.y + 320 },
+      [
+        { name: 'score', type: 'DECIMAL', dialectTypes: { [dialect]: normalizeSqlType('DECIMAL', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Similarity score, reranker score, or hybrid retrieval ranking.' },
+        { name: 'rank_position', type: 'INTEGER', dialectTypes: { [dialect]: normalizeSqlType('INTEGER', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Final ordering of returned chunks for the query.' },
+        { name: 'used_in_answer', type: normalizeSqlType('BOOLEAN', dialect), dialectTypes: { [dialect]: normalizeSqlType('BOOLEAN', dialect) }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'sqlserver' ? '0' : 'FALSE', comment: 'Whether this retrieved chunk was actually used in the final answer.' },
+      ],
+      'Join table capturing which chunks were retrieved for each RAG query.'
+    )
+
+    const docPk = preferredReferenceColumn(docTable, 'id')!
+    const chunkDocFk = appendReferenceColumn(chunkTable, docTable, docPk, dialect, 'document_id')
+    addReferenceRelation(docTable, docPk, chunkTable, chunkDocFk)
+
+    const queryPk = preferredReferenceColumn(queryTable, 'id')!
+    const chunkPk = preferredReferenceColumn(chunkTable, 'id')!
+    const resultQueryFk = appendReferenceColumn(resultTable, queryTable, queryPk, dialect, 'query_id')
+    const resultChunkFk = appendReferenceColumn(resultTable, chunkTable, chunkPk, dialect, 'chunk_id')
+    addReferenceRelation(queryTable, queryPk, resultTable, resultQueryFk)
+    addReferenceRelation(chunkTable, chunkPk, resultTable, resultChunkFk)
+
+    selectedTableId.value = docTable.id
+    editingTableId.value = docTable.id
+    clearMultiSelection()
+    persist()
+    return { docTable, chunkTable, queryTable, resultTable }
+  }
+
+  function createAuditSystem(position = { x: 100, y: 100 }) {
+    const s = sc()
+    const dialect = s.dialect ?? 'postgresql'
+    const eventTable = createSystemTable(
+      'audit_events',
+      position,
+      [
+        { name: 'entity_type', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Domain entity or aggregate being audited, such as order, invoice, user, or document.' },
+        { name: 'entity_id', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Identifier of the entity that changed. Store as text if many entity types participate.' },
+        { name: 'event_type', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Created, updated, deleted, approved, exported, logged_in, or other tracked action.' },
+        { name: 'changed_by', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Actor identifier for the user, service, batch job, or integration.' },
+        { name: 'changed_at', type: dialect === 'postgresql' ? 'TIMESTAMPTZ' : dialect === 'sqlserver' ? 'DATETIME2' : 'DATETIME', dialectTypes: { [dialect]: dialect === 'postgresql' ? 'TIMESTAMPTZ' : dialect === 'sqlserver' ? 'DATETIME2' : 'DATETIME' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? 'NOW()' : dialect === 'sqlserver' ? 'SYSDATETIME()' : 'CURRENT_TIMESTAMP', comment: 'When the system recorded the audit event.' },
+        { name: 'request_id', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Correlates this audit event with a request, job, or trace span.' },
+        { name: 'metadata_json', type: dialect === 'postgresql' ? 'JSONB' : 'JSON', dialectTypes: { [dialect]: normalizeSqlType(dialect === 'postgresql' ? 'JSONB' : 'JSON', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? "'{}'" : dialect === 'mysql' ? "'{}'" : '', comment: 'Extra metadata such as IP, user agent, tenant, compliance tag, or execution environment.' },
+      ],
+      'Top-level audit events for entity changes and security-relevant actions.'
+    )
+    const detailTable = createSystemTable(
+      'audit_event_changes',
+      { x: position.x + 420, y: position.y + 60 },
+      [
+        { name: 'field_name', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Field or attribute that changed, when tracking per-field deltas.' },
+        { name: 'old_value', type: 'TEXT', dialectTypes: { [dialect]: normalizeSqlType('TEXT', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Serialized old value before the change.' },
+        { name: 'new_value', type: 'TEXT', dialectTypes: { [dialect]: normalizeSqlType('TEXT', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Serialized new value after the change.' },
+        { name: 'change_payload', type: dialect === 'postgresql' ? 'JSONB' : 'JSON', dialectTypes: { [dialect]: normalizeSqlType(dialect === 'postgresql' ? 'JSONB' : 'JSON', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? "'{}'" : dialect === 'mysql' ? "'{}'" : '', comment: 'Structured diff payload, before/after document, or compliance evidence.' },
+      ],
+      'Per-field or per-section change details for each audit event.'
+    )
+
+    const eventPk = preferredReferenceColumn(eventTable, 'id')!
+    const detailFk = appendReferenceColumn(detailTable, eventTable, eventPk, dialect, 'audit_event_id')
+    addReferenceRelation(eventTable, eventPk, detailTable, detailFk)
+
+    selectedTableId.value = eventTable.id
+    editingTableId.value = eventTable.id
+    clearMultiSelection()
+    persist()
+    return { eventTable, detailTable }
+  }
+
   // Groups
 
   function createGroup(position = { x: 60, y: 60 }) {
@@ -569,6 +962,63 @@ export const useSchemaStore = defineStore('schema', () => {
     }
     if (selectedGroupId.value === groupId) selectedGroupId.value = null
     if (editingGroupId.value  === groupId) editingGroupId.value  = null
+    persist()
+  }
+
+  function createComment(position = { x: 120, y: 120 }) {
+    const comment: CommentBox = {
+      id: uuidv4(),
+      text: 'Add design note, caveat, or explainer...',
+      position,
+      size: { w: 280, h: 120 },
+      color: '#FDE68A',
+    }
+    sc().comments.push(comment)
+    clearMultiSelection()
+    selectedCommentId.value = comment.id
+    selectedTableId.value = null
+    selectedGroupId.value = null
+    selectedRelationId.value = null
+    persist()
+    return comment
+  }
+
+  function updateComment(commentId: string, updates: Partial<CommentBox>) {
+    const comment = sc().comments.find(entry => entry.id === commentId)
+    if (!comment) return
+    Object.assign(comment, updates)
+    persist()
+  }
+
+  function deleteComment(commentId: string) {
+    const s = sc()
+    s.comments = s.comments.filter(entry => entry.id !== commentId)
+    if (selectedCommentId.value === commentId) selectedCommentId.value = null
+    if (multiSelectedCommentIds.value.has(commentId)) {
+      const next = new Set(multiSelectedCommentIds.value)
+      next.delete(commentId)
+      multiSelectedCommentIds.value = next
+    }
+    persist()
+  }
+
+  function updateCommentPosition(commentId: string, position: { x: number; y: number }, commit = false) {
+    const comment = sc().comments.find(entry => entry.id === commentId)
+    if (!comment) return
+    comment.position = position
+    if (commit) persist()
+  }
+
+  function updateCommentSize(commentId: string, size: { w: number; h: number }) {
+    const comment = sc().comments.find(entry => entry.id === commentId)
+    if (!comment) return
+    comment.size = {
+      w: Math.max(180, size.w),
+      h: Math.max(80, size.h),
+    }
+  }
+
+  function commitCommentSize() {
     persist()
   }
 
@@ -958,6 +1408,12 @@ export const useSchemaStore = defineStore('schema', () => {
         w: group.size.w,
         h: group.size.h,
       })),
+      ...s.comments.map(comment => ({
+        x: comment.position.x,
+        y: comment.position.y,
+        w: comment.size.w,
+        h: comment.size.h,
+      })),
     ]
 
     if (items.length === 0) {
@@ -1009,6 +1465,18 @@ export const useSchemaStore = defineStore('schema', () => {
       const y = group.position.y + offsetY
       lines.push(`  <rect x="${x}" y="${y}" width="${group.size.w}" height="${group.size.h}" rx="18" fill="${styled ? 'rgba(255,255,255,0.7)' : 'transparent'}" stroke="${styled ? group.color : '#64748b'}" stroke-opacity="${styled ? '0.72' : '1'}" stroke-width="1.6" stroke-dasharray="10 6" />`)
       lines.push(`  <text x="${x + 18}" y="${y + 28}" class="group-label">${svgText(group.name)}</text>`)
+    }
+
+    for (const comment of s.comments) {
+      const x = comment.position.x + offsetX
+      const y = comment.position.y + offsetY
+      const color = comment.color || '#FDE68A'
+      lines.push(`  <rect x="${x}" y="${y}" width="${comment.size.w}" height="${comment.size.h}" rx="16" fill="${styled ? color : '#ffffff'}" fill-opacity="${styled ? '0.14' : '1'}" stroke="${styled ? color : '#64748b'}" stroke-opacity="${styled ? '0.5' : '1'}" stroke-width="1.2" />`)
+      lines.push(`  <text x="${x + 16}" y="${y + 24}" class="table-kicker">NOTE</text>`)
+      const textLines = (comment.text || '').split(/\r?\n/).slice(0, 6)
+      textLines.forEach((line, index) => {
+        lines.push(`  <text x="${x + 16}" y="${y + 46 + index * 16}" class="comment-text">${svgText(line)}</text>`)
+      })
     }
 
     for (const relation of s.relations) {
@@ -1104,10 +1572,17 @@ export const useSchemaStore = defineStore('schema', () => {
     if (!json.dialect) json.dialect = 'postgresql'
     if (!json.groups) json.groups = []
     if (!json.relations) json.relations = []
+    if (!json.comments) json.comments = []
     // @ts-ignore
     json.groups = json.groups.map(g => ({ parentGroupId: null, ...g }))
     // @ts-ignore
     json.relations = json.relations.map(r => ({ waypoints: [], ...r }))
+    // @ts-ignore
+    json.comments = json.comments.map(comment => ({
+      ...comment,
+      size: comment.size ?? { w: 280, h: 120 },
+      color: comment.color ?? '#FDE68A',
+    }))
     // @ts-ignore
     json.tables = json.tables.map(t => ({
       ...t,
@@ -1141,8 +1616,10 @@ export const useSchemaStore = defineStore('schema', () => {
   function selectAllCanvas() {
     multiSelectedTableIds.value = new Set(sc().tables.map(table => table.id))
     multiSelectedGroupIds.value = new Set(sc().groups.map(group => group.id))
+    multiSelectedCommentIds.value = new Set(sc().comments.map(comment => comment.id))
     selectedTableId.value = null
     selectedGroupId.value = null
+    selectedCommentId.value = null
     selectedRelationId.value = null
   }
 
@@ -1157,24 +1634,29 @@ export const useSchemaStore = defineStore('schema', () => {
       : selectedGroupId.value
         ? [selectedGroupId.value]
         : []
-    return { tableIds, groupIds }
+    const commentIds = multiSelectedCommentIds.value.size > 0
+      ? [...multiSelectedCommentIds.value]
+      : selectedCommentId.value
+        ? [selectedCommentId.value]
+        : []
+    return { tableIds, groupIds, commentIds }
   }
 
   function copySelectedCanvasItems() {
-    const { tableIds, groupIds } = selectedCanvasItemIds()
-    if (tableIds.length === 0 && groupIds.length === 0) return
-    copiedCanvasSelection.value = { tableIds: [...tableIds], groupIds: [...groupIds] }
+    const { tableIds, groupIds, commentIds } = selectedCanvasItemIds()
+    if (tableIds.length === 0 && groupIds.length === 0 && commentIds.length === 0) return
+    copiedCanvasSelection.value = { tableIds: [...tableIds], groupIds: [...groupIds], commentIds: [...commentIds] }
   }
 
   function hasCopiedCanvasItems() {
     return !!copiedCanvasSelection.value &&
-      (copiedCanvasSelection.value.tableIds.length > 0 || copiedCanvasSelection.value.groupIds.length > 0)
+      (copiedCanvasSelection.value.tableIds.length > 0 || copiedCanvasSelection.value.groupIds.length > 0 || copiedCanvasSelection.value.commentIds.length > 0)
   }
 
-  function duplicateCanvasItems(selectedTableIds: string[], selectedGroupIds: string[]) {
+  function duplicateCanvasItems(selectedTableIds: string[], selectedGroupIds: string[], selectedCommentIds: string[]) {
     const s = sc()
 
-    if (selectedTableIds.length === 0 && selectedGroupIds.length === 0) return
+    if (selectedTableIds.length === 0 && selectedGroupIds.length === 0 && selectedCommentIds.length === 0) return
 
     const existingTableNames = s.tables.map(table => table.name)
     const existingGroupNames = s.groups.map(group => group.name)
@@ -1182,6 +1664,7 @@ export const useSchemaStore = defineStore('schema', () => {
     const tableIdMap = new Map<string, string>()
     const nextGroups: TableGroup[] = []
     const nextTables: Table[] = []
+    const nextComments: CommentBox[] = []
 
     for (const groupId of selectedGroupIds) {
       const group = s.groups.find(entry => entry.id === groupId)
@@ -1220,6 +1703,16 @@ export const useSchemaStore = defineStore('schema', () => {
       nextTables.push(clonedTable)
     }
 
+    for (const commentId of selectedCommentIds) {
+      const comment = s.comments.find(entry => entry.id === commentId)
+      if (!comment) continue
+      nextComments.push({
+        ...comment,
+        id: uuidv4(),
+        position: { x: comment.position.x + 36, y: comment.position.y + 36 },
+      })
+    }
+
     const nextRelations: Relation[] = []
     for (const relation of s.relations) {
       if (!tableIdMap.has(relation.sourceTableId) || !tableIdMap.has(relation.targetTableId)) continue
@@ -1246,23 +1739,26 @@ export const useSchemaStore = defineStore('schema', () => {
 
     s.groups.push(...nextGroups)
     s.tables.push(...nextTables)
+    s.comments.push(...nextComments)
     s.relations.push(...nextRelations)
     multiSelectedGroupIds.value = new Set(nextGroups.map(group => group.id))
     multiSelectedTableIds.value = new Set(nextTables.map(table => table.id))
+    multiSelectedCommentIds.value = new Set(nextComments.map(comment => comment.id))
     selectedGroupId.value = null
     selectedTableId.value = null
+    selectedCommentId.value = null
     selectedRelationId.value = null
     persist()
   }
 
   function duplicateSelectedCanvasItems() {
-    const { tableIds, groupIds } = selectedCanvasItemIds()
-    duplicateCanvasItems(tableIds, groupIds)
+    const { tableIds, groupIds, commentIds } = selectedCanvasItemIds()
+    duplicateCanvasItems(tableIds, groupIds, commentIds)
   }
 
   function pasteCopiedCanvasItems() {
     if (!copiedCanvasSelection.value) return
-    duplicateCanvasItems(copiedCanvasSelection.value.tableIds, copiedCanvasSelection.value.groupIds)
+    duplicateCanvasItems(copiedCanvasSelection.value.tableIds, copiedCanvasSelection.value.groupIds, copiedCanvasSelection.value.commentIds)
   }
 
   function toggleTableSelection(tableId: string) {
@@ -1282,6 +1778,18 @@ export const useSchemaStore = defineStore('schema', () => {
     if (next.has(groupId)) next.delete(groupId)
     else next.add(groupId)
     multiSelectedGroupIds.value = next
+    selectedTableId.value = null
+    selectedGroupId.value = null
+    selectedRelationId.value = null
+  }
+
+  function toggleCommentSelection(commentId: string) {
+    const next = new Set(multiSelectedCommentIds.value)
+    if (selectedCommentId.value && selectedCommentId.value !== commentId) next.add(selectedCommentId.value)
+    if (next.has(commentId)) next.delete(commentId)
+    else next.add(commentId)
+    multiSelectedCommentIds.value = next
+    selectedCommentId.value = null
     selectedTableId.value = null
     selectedGroupId.value = null
     selectedRelationId.value = null
@@ -1307,16 +1815,20 @@ export const useSchemaStore = defineStore('schema', () => {
 
   return {
     schema,
-    selectedTableId, selectedRelationId, selectedGroupId, editingTableId, editingGroupId,
-    multiSelectedTableIds, multiSelectedGroupIds,
-    selectedTable, selectedGroup, clearSelection, showMinimap, lightExportMode,
+    selectedTableId, selectedRelationId, selectedGroupId, selectedCommentId, editingTableId, editingGroupId,
+    multiSelectedTableIds, multiSelectedGroupIds, multiSelectedCommentIds,
+    selectedTable, selectedGroup, selectedComment, clearSelection, showMinimap, lightExportMode,
     sqlTables, resourceTables,
     createTable, updateTable, deleteTable,
     createResource,
     addColumn, updateColumn, deleteColumn,
     updateTablePosition, updateTableWidth, commitTableWidth,
     addRelation, updateRelation, deleteRelation,
+    createBridgeTableBetweenTables,
+    createBridgeTableForRelation,
+    createRagSystem, createAuditSystem,
     createGroup, updateGroup, deleteGroup,
+    createComment, updateComment, deleteComment, updateCommentPosition, updateCommentSize, commitCommentSize,
     updateGroupPosition, commitGroupDrop,
     updateGroupSize, commitGroupSize,
     assignTableToGroup, toggleTableLock,
@@ -1324,7 +1836,7 @@ export const useSchemaStore = defineStore('schema', () => {
     canUndo, canRedo, undo, redo,
     clearMultiSelection, selectAllCanvas, duplicateSelectedCanvasItems,
     copySelectedCanvasItems, pasteCopiedCanvasItems, hasCopiedCanvasItems,
-    toggleTableSelection, toggleGroupSelection,
+    toggleTableSelection, toggleGroupSelection, toggleCommentSelection,
     isDraftTable, isDraftGroup, discardDraftTable, discardDraftGroup,
     exportSQL, exportMermaid, exportSVG, saveToFile, loadFromJSON, newSchema,
   }

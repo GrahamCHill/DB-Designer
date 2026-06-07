@@ -22,6 +22,7 @@ function blankSchema(name = 'Untitled'): Schema {
     tables: [],
     relations: [],
     groups: [],
+    comments: [],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }
@@ -61,7 +62,13 @@ function loadSchema(schemaId: string): Schema | null {
       if (!s.dialect) s.dialect = 'postgresql'
       if (!s.groups) s.groups = []
       if (!s.relations) s.relations = []
+      if (!s.comments) s.comments = []
       s.relations = s.relations.map(r => ({ waypoints: [], ...r }))
+      s.comments = s.comments.map(comment => ({
+        ...comment,
+        size: comment.size ?? { w: 280, h: 120 },
+        color: comment.color ?? '#FDE68A',
+      }))
       s.tables = s.tables.map(t => {
         // @ts-ignore
         return ({
@@ -199,6 +206,7 @@ export const useTabsStore = defineStore('tabs', () => {
         waypoints: relation.waypoints ? relation.waypoints.map(waypoint => ({ ...waypoint })) : [],
       })),
       groups: (schema.groups ?? []).map(group => ({ ...group })),
+      comments: (schema.comments ?? []).map(comment => ({ ...comment, size: { ...comment.size } })),
       updatedAt: new Date().toISOString(),
     }
 

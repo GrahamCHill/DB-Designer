@@ -58,6 +58,28 @@ export interface TableGroup {
   parentGroupId: string | null  // for nested groups
 }
 
+export interface CommentBox {
+  id: string
+  text: string
+  position: { x: number; y: number }
+  size: { w: number; h: number }
+  color: string
+}
+
+export type BridgeTableUseCase =
+  | 'generic'
+  | 'membership'
+  | 'line-items'
+  | 'enrollment'
+  | 'assignment'
+  | 'vector-rag'
+  | 'audit-trail'
+
+export interface BridgeTableOptions {
+  useCase: BridgeTableUseCase
+  tableName?: string
+  notes?: string
+}
 
 export interface Schema {
   id: string
@@ -66,6 +88,7 @@ export interface Schema {
   tables: Table[]
   relations: Relation[]
   groups: TableGroup[]
+  comments: CommentBox[]
   createdAt: string
   updatedAt: string
 }
