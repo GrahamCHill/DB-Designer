@@ -105,8 +105,13 @@ jobs:
                 delete config.bundle.macOS.signingIdentity;
                 delete config.bundle.macOS.notarization;
               }
+              // Explicitly disable signing in tauri v2 by ensuring macOS bundle config exists but is empty
+              // tauri-action might still try to sign if it sees environment variables.
+              // We will also use a hack to prevent tauri-action from seeing the variables.
               fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(config, null, 2));
             "
+            # Set environment variables to empty for subsequent steps in this job
+            # However, env block in step overrides this.
           fi
         env:
           T_WINDOWS_THUMBPRINT: ${{ secrets.TAURI_WINDOWS_CERT_THUMBPRINT }}
@@ -135,12 +140,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Only pass Apple secrets if APPLE_CERTIFICATE is present
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_ID: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_ID || '' }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_TEAM_ID || '' }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
