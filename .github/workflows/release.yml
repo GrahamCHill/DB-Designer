@@ -20,22 +20,28 @@ jobs:
       release_name: ${{ steps.release-meta.outputs.release_name }}
       release_draft: ${{ steps.release-meta.outputs.release_draft }}
       release_prerelease: ${{ steps.release-meta.outputs.release_prerelease }}
+      version: ${{ steps.release-meta.outputs.version }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Determine release metadata
         id: release-meta
         shell: bash
         run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             TAG_NAME="${GITHUB_REF#refs/tags/}"
             RELEASE_NAME="DB Designer ${TAG_NAME}"
             RELEASE_DRAFT="false"
             RELEASE_PRERELEASE="false"
           else
-            SHORT_SHA="${GITHUB_SHA::7}"
-            TAG_NAME="build-${GITHUB_RUN_NUMBER}-${SHORT_SHA}"
-            RELEASE_NAME="DB Designer build ${GITHUB_RUN_NUMBER} (${SHORT_SHA})"
+            TAG_NAME="v${VERSION}"
+            RELEASE_NAME="DB Designer ${VERSION}"
             RELEASE_DRAFT="false"
-            RELEASE_PRERELEASE="true"
+            RELEASE_PRERELEASE="false"
           fi
 
           {
@@ -73,6 +79,24 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Update versions (installer)
+        shell: bash
+        run: |
+          npm version ${{ needs.prepare-release.outputs.version }} --no-git-tag-version --allow-same-version
+          
+          # Conditionally update tauri.conf.json for Windows signing if thumbprint is present
+          if [ -n "$T_WINDOWS_THUMBPRINT" ]; then
+            echo "Setting Windows certificate thumbprint..."
+            node -e "
+              const fs = require('fs');
+              const config = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+              config.bundle.windows.certificateThumbprint = process.env.T_WINDOWS_THUMBPRINT;
+              fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(config, null, 2));
+            "
+          fi
+        env:
+          T_WINDOWS_THUMBPRINT: ${{ secrets.TAURI_WINDOWS_CERT_THUMBPRINT }}
+
       - name: Cache Rust artifacts
         uses: swatinem/rust-cache@v2
         with:
@@ -96,6 +120,14 @@ jobs:
         uses: tauri-apps/tauri-action@v0.6.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ needs.prepare-release.outputs.tag_name }}
           releaseName: ${{ needs.prepare-release.outputs.release_name }}
