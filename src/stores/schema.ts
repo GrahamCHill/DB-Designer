@@ -809,6 +809,7 @@ export const useSchemaStore = defineStore('schema', () => {
       [
         { name: 'title', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Display title for the document, file, PDF, note, or record set.' },
         { name: 'source_uri', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: true, primaryKey: false, unique: true, immutable: false, defaultValue: '', comment: 'Original object store path, URL, S3 key, or canonical file location.' },
+        { name: 'ingestion_status', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: "'pending'", comment: 'Current processing status: pending | processing | ready | failed.' },
         { name: 'mime_type', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Document type such as application/pdf, text/markdown, or text/html.' },
         { name: 'metadata_json', type: dialect === 'postgresql' ? 'JSONB' : 'JSON', dialectTypes: { [dialect]: normalizeSqlType(dialect === 'postgresql' ? 'JSONB' : 'JSON', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? "'{}'" : dialect === 'mysql' ? "'{}'" : '', comment: 'Shared metadata such as tenant, tags, ingestion labels, or source system identifiers.' },
       ],
@@ -821,9 +822,10 @@ export const useSchemaStore = defineStore('schema', () => {
         { name: 'chunk_index', type: 'INTEGER', dialectTypes: { [dialect]: normalizeSqlType('INTEGER', dialect) }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '0', comment: 'Chunk order inside the source document.' },
         { name: 'page_number', type: 'INTEGER', dialectTypes: { [dialect]: normalizeSqlType('INTEGER', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Page number for PDFs or other paginated sources.' },
         { name: 'content_text', type: 'TEXT', dialectTypes: { [dialect]: normalizeSqlType('TEXT', dialect) }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Normalized chunk text that will be embedded and cited in answers.' },
-        { name: 'embedding_vector', type: dialect === 'postgresql' ? 'VECTOR' : 'TEXT', dialectTypes: { [dialect]: dialect === 'postgresql' ? 'VECTOR' : 'TEXT' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Stored embedding, vector reference, or serialized embedding payload.' },
+        { name: 'embedding_vector', type: dialect === 'postgresql' ? 'VECTOR(1536)' : 'TEXT', dialectTypes: { [dialect]: dialect === 'postgresql' ? 'VECTOR(1536)' : 'TEXT' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Stored embedding, vector reference, or serialized embedding payload.' },
         { name: 'token_count', type: 'INTEGER', dialectTypes: { [dialect]: normalizeSqlType('INTEGER', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Approximate chunk token count for packing and retrieval tuning.' },
         { name: 'metadata_json', type: dialect === 'postgresql' ? 'JSONB' : 'JSON', dialectTypes: { [dialect]: normalizeSqlType(dialect === 'postgresql' ? 'JSONB' : 'JSON', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? "'{}'" : dialect === 'mysql' ? "'{}'" : '', comment: 'Per-chunk metadata such as headings, bounding boxes, speaker, table region, or extraction quality.' },
+        { name: 'created_at', type: dialect === 'postgresql' ? 'TIMESTAMPTZ' : dialect === 'sqlserver' ? 'DATETIME2' : 'DATETIME', dialectTypes: { [dialect]: dialect === 'postgresql' ? 'TIMESTAMPTZ' : dialect === 'sqlserver' ? 'DATETIME2' : 'DATETIME' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? 'NOW()' : dialect === 'sqlserver' ? 'SYSDATETIME()' : 'CURRENT_TIMESTAMP', comment: 'When the chunk was created or last updated.' },
       ],
       'Chunked document content for vector search and grounding.'
     )
@@ -831,8 +833,9 @@ export const useSchemaStore = defineStore('schema', () => {
       'rag_queries',
       { x: position.x, y: position.y + 280 },
       [
+        { name: 'session_id', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Optional link to a conversation session or user identifier.' },
         { name: 'query_text', type: 'TEXT', dialectTypes: { [dialect]: normalizeSqlType('TEXT', dialect) }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'User or system prompt used for retrieval.' },
-        { name: 'query_embedding', type: dialect === 'postgresql' ? 'VECTOR' : 'TEXT', dialectTypes: { [dialect]: dialect === 'postgresql' ? 'VECTOR' : 'TEXT' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Optional query embedding for semantic retrieval tracing.' },
+        { name: 'query_embedding', type: dialect === 'postgresql' ? 'VECTOR(1536)' : 'TEXT', dialectTypes: { [dialect]: dialect === 'postgresql' ? 'VECTOR(1536)' : 'TEXT' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Optional query embedding for semantic retrieval tracing.' },
         { name: 'created_at', type: dialect === 'postgresql' ? 'TIMESTAMPTZ' : dialect === 'sqlserver' ? 'DATETIME2' : 'DATETIME', dialectTypes: { [dialect]: dialect === 'postgresql' ? 'TIMESTAMPTZ' : dialect === 'sqlserver' ? 'DATETIME2' : 'DATETIME' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? 'NOW()' : dialect === 'sqlserver' ? 'SYSDATETIME()' : 'CURRENT_TIMESTAMP', comment: 'When the query was issued.' },
       ],
       'Captured retrieval queries and prompts.'
@@ -841,7 +844,7 @@ export const useSchemaStore = defineStore('schema', () => {
       'rag_query_results',
       { x: position.x + 420, y: position.y + 320 },
       [
-        { name: 'score', type: 'DECIMAL', dialectTypes: { [dialect]: normalizeSqlType('DECIMAL', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Similarity score, reranker score, or hybrid retrieval ranking.' },
+        { name: 'score', type: 'FLOAT', dialectTypes: { [dialect]: dialect === 'postgresql' ? 'FLOAT8' : normalizeSqlType('FLOAT', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Similarity score, reranker score, or hybrid retrieval ranking.' },
         { name: 'rank_position', type: 'INTEGER', dialectTypes: { [dialect]: normalizeSqlType('INTEGER', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Final ordering of returned chunks for the query.' },
         { name: 'used_in_answer', type: normalizeSqlType('BOOLEAN', dialect), dialectTypes: { [dialect]: normalizeSqlType('BOOLEAN', dialect) }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'sqlserver' ? '0' : 'FALSE', comment: 'Whether this retrieved chunk was actually used in the final answer.' },
       ],
@@ -873,15 +876,17 @@ export const useSchemaStore = defineStore('schema', () => {
       'audit_events',
       position,
       [
-        { name: 'entity_type', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Domain entity or aggregate being audited, such as order, invoice, user, or document.' },
-        { name: 'entity_id', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Identifier of the entity that changed. Store as text if many entity types participate.' },
-        { name: 'event_type', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Created, updated, deleted, approved, exported, logged_in, or other tracked action.' },
-        { name: 'changed_by', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Actor identifier for the user, service, batch job, or integration.' },
-        { name: 'changed_at', type: dialect === 'postgresql' ? 'TIMESTAMPTZ' : dialect === 'sqlserver' ? 'DATETIME2' : 'DATETIME', dialectTypes: { [dialect]: dialect === 'postgresql' ? 'TIMESTAMPTZ' : dialect === 'sqlserver' ? 'DATETIME2' : 'DATETIME' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? 'NOW()' : dialect === 'sqlserver' ? 'SYSDATETIME()' : 'CURRENT_TIMESTAMP', comment: 'When the system recorded the audit event.' },
-        { name: 'request_id', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Correlates this audit event with a request, job, or trace span.' },
-        { name: 'metadata_json', type: dialect === 'postgresql' ? 'JSONB' : 'JSON', dialectTypes: { [dialect]: normalizeSqlType(dialect === 'postgresql' ? 'JSONB' : 'JSON', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? "'{}'" : dialect === 'mysql' ? "'{}'" : '', comment: 'Extra metadata such as IP, user agent, tenant, compliance tag, or execution environment.' },
+        { name: 'entity_type', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Domain entity being audited (e.g., order, user).' },
+        { name: 'entity_id', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Identifier of the entity that changed.' },
+        { name: 'event_type', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Action: CREATE, UPDATE, DELETE, LOGIN, etc.' },
+        { name: 'severity', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: "'INFO'", comment: 'Audit level: INFO, WARN, ERROR, CRITICAL.' },
+        { name: 'changed_by', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'User or service that performed the action.' },
+        { name: 'changed_at', type: dialect === 'postgresql' ? 'TIMESTAMPTZ' : dialect === 'sqlserver' ? 'DATETIME2' : 'DATETIME', dialectTypes: { [dialect]: dialect === 'postgresql' ? 'TIMESTAMPTZ' : dialect === 'sqlserver' ? 'DATETIME2' : 'DATETIME' }, nullable: false, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? 'NOW()' : dialect === 'sqlserver' ? 'SYSDATETIME()' : 'CURRENT_TIMESTAMP', comment: 'Timestamp of the event.' },
+        { name: 'source_ip', type: 'VARCHAR', dialectTypes: { [dialect]: 'VARCHAR' }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'IP address of the requester.' },
+        { name: 'user_agent', type: 'TEXT', dialectTypes: { [dialect]: normalizeSqlType('TEXT', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: '', comment: 'Browser or client user agent.' },
+        { name: 'tags_json', type: dialect === 'postgresql' ? 'JSONB' : 'JSON', dialectTypes: { [dialect]: normalizeSqlType(dialect === 'postgresql' ? 'JSONB' : 'JSON', dialect) }, nullable: true, primaryKey: false, unique: false, immutable: false, defaultValue: dialect === 'postgresql' ? "'[]'" : dialect === 'mysql' ? "'[]'" : '', comment: 'Labels for filtering (e.g., compliance, security).' },
       ],
-      'Top-level audit events for entity changes and security-relevant actions.'
+      'Detailed audit log for system and entity changes.'
     )
     const detailTable = createSystemTable(
       'audit_event_changes',
@@ -1165,6 +1170,28 @@ export const useSchemaStore = defineStore('schema', () => {
     })
     const orderedTables = orderTablesForSqlExport(exportTables, exportRelations)
     const groupsById = new Map(s.groups.map(group => [group.id, group]))
+    const commentsByGroupId = new Map<string, CommentBox[]>()
+    for (const c of s.comments) {
+      const table = s.tables.find(t =>
+        t.groupId &&
+        c.position.x >= s.groups.find(g => g.id === t.groupId)!.position.x &&
+        c.position.x <= s.groups.find(g => g.id === t.groupId)!.position.x + s.groups.find(g => g.id === t.groupId)!.size.w &&
+        c.position.y >= s.groups.find(g => g.id === t.groupId)!.position.y &&
+        c.position.y <= s.groups.find(g => g.id === t.groupId)!.position.y + s.groups.find(g => g.id === t.groupId)!.size.h
+      )
+      // Actually, let's use a simpler heuristic or check if we can determine group from position
+    }
+    // RE-EVALUATE: The CommentBox doesn't have a groupId. I need to find which group it's inside.
+    for (const g of s.groups) {
+      const inGroup = s.comments.filter(c =>
+        c.position.x >= g.position.x &&
+        c.position.x <= g.position.x + g.size.w &&
+        c.position.y >= g.position.y &&
+        c.position.y <= g.position.y + g.size.h
+      )
+      if (inGroup.length > 0) commentsByGroupId.set(g.id, inGroup)
+    }
+
     const tableById = new Map(exportTables.map(table => [table.id, table]))
     const createdTableIds = new Set<string>()
     const deferredConstraints: string[] = []
@@ -1175,7 +1202,17 @@ export const useSchemaStore = defineStore('schema', () => {
       if (groupId !== previousGroupId) {
         if (groupId) {
           const group = groupsById.get(groupId)
-          if (group) lines.push(`-- Group: ${group.name}`, '')
+          if (group) {
+            lines.push(`-- Group: ${group.name}`)
+            const groupComments = commentsByGroupId.get(groupId)
+            if (groupComments) {
+              for (const gc of groupComments) {
+                const commentLines = gc.text.split('\n')
+                for (const cl of commentLines) lines.push(`-- ${cl}`)
+              }
+            }
+            lines.push('')
+          }
         } else if (previousGroupId !== undefined) {
           lines.push('-- Ungrouped Tables', '')
         }
@@ -1201,7 +1238,7 @@ export const useSchemaStore = defineStore('schema', () => {
           if (!src || !scol || !tcol || rel.type === 'many-to-many') continue
 
           const constraintClause =
-            `FOREIGN KEY (${tcol.name}) REFERENCES ${src.name}(${scol.name})`
+            `FOREIGN KEY (${tcol.name}) REFERENCES ${src.name}(${scol.name}) ON DELETE CASCADE`
 
           if (src.id === table.id || createdTableIds.has(src.id)) {
             colDefs.push(`  ${constraintClause}`)
@@ -1225,6 +1262,23 @@ export const useSchemaStore = defineStore('schema', () => {
       lines.push('-- Deferred foreign key constraints', '')
       lines.push(...deferredConstraints, '')
     }
+
+    // Indices (especially for PGVector HNSW)
+    const hnswIndices: string[] = []
+    if (dialect === 'postgresql') {
+      for (const t of exportTables) {
+        for (const col of t.columns) {
+          if (col.type.toUpperCase().startsWith('VECTOR')) {
+            hnswIndices.push(`CREATE INDEX ON ${t.name} USING hnsw (${col.name} vector_cosine_ops);`)
+          }
+        }
+      }
+    }
+    if (hnswIndices.length > 0) {
+      lines.push('-- Vector indices', '')
+      lines.push(...hnswIndices, '')
+    }
+
     if (resourceTables.value.length > 0) {
       lines.push('-- External resources (not emitted as SQL tables)', '')
       for (const resource of resourceTables.value) {

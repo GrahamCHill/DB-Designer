@@ -70,7 +70,7 @@
           :class="{ connected: connectedAsSource.has(col.id) }"
           :style="connectedAsSource.has(col.id) ? { '--dot-color': table.color } : {}"
           title="Output — drag to connect"
-          @mousedown.stop="$emit('start-relation', col.id)"
+          @mousedown.stop="$emit('start-relation', { columnId: col.id, event: $event })"
         />
       </div>
 

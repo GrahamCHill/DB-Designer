@@ -22,6 +22,8 @@
           Import
           <input type="file" accept=".json" style="display:none" @change="loadFile" />
         </label>
+        <button class="btn-ghost-sm" @click="store.persist">Save</button>
+        <button class="btn-ghost-sm" @click="store.loadFromStorage">Load</button>
       </div>
       <div class="project-hint">
         `.api.json` preserves this designer canvas so you can reopen it later. Use the API overview panel to export OpenAPI or code stubs for real tooling.

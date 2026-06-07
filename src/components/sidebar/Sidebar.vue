@@ -279,6 +279,14 @@
     </div>
 
     <ExportModal v-if="showExport" @close="showExport = false" />
+    <ConfirmDialog
+      v-if="confirmState.show"
+      :title="confirmState.title"
+      :message="confirmState.message"
+      :danger="confirmState.danger"
+      @confirm="handleConfirm"
+      @cancel="closeConfirm"
+    />
   </aside>
 </template>
 
@@ -286,10 +294,28 @@
 import { ref, computed, watch } from 'vue'
 import { useSchemaStore } from '../../stores/schema'
 import ExportModal from '../modals/ExportModal.vue'
+import ConfirmDialog from '../modals/ConfirmDialog.vue'
 import type { Schema, SQLDialect } from '../../types'
 
 const store = useSchemaStore()
 const showExport = ref(false)
+
+const confirmState = ref({
+  show: false,
+  title: '',
+  message: '',
+  danger: false,
+  onConfirm: () => {},
+})
+
+function closeConfirm() {
+  confirmState.value.show = false
+}
+
+function handleConfirm() {
+  confirmState.value.onConfirm()
+  closeConfirm()
+}
 const appVersion = (import.meta.env.VITE_APP_VERSION || '').trim()
 const appVersionLabel = appVersion ? `v${appVersion}` : 'dev'
 const DIALECT_OPTIONS: { label: string; value: SQLDialect }[] = [
@@ -443,19 +469,43 @@ const targetTable = computed(() => store.schema.tables.find(t => t.id === select
 const targetCol   = computed(() => targetTable.value?.columns.find(c => c.id === selectedRelation.value?.targetColumnId))
 
 function confirmDeleteTable() {
-  if (store.selectedTableId && confirm(`Delete "${store.selectedTable?.name}"?`)) {
-    store.deleteTable(store.selectedTableId)
+  if (store.selectedTableId) {
+    confirmState.value = {
+      show: true,
+      title: 'Delete Table',
+      message: `Are you sure you want to delete "${store.selectedTable?.name}"?`,
+      danger: true,
+      onConfirm: () => {
+        store.deleteTable(store.selectedTableId)
+      },
+    }
   }
 }
 
 function confirmDeleteGroup() {
   if (!store.selectedGroupId) return
+  const group = store.schema.groups.find(g => g.id === store.selectedGroupId)
   const n = tablesInGroup(store.selectedGroupId).length
   if (n > 0) {
-    const choice = confirm(`Group has ${n} table(s).\n\nOK = delete tables too\nCancel = keep tables (ungroup only)`)
-    store.deleteGroup(store.selectedGroupId, choice)
+    confirmState.value = {
+      show: true,
+      title: 'Delete Group',
+      message: `Group "${group?.name}" has ${n} table(s). Do you want to delete the tables too?`,
+      danger: true,
+      onConfirm: () => {
+        store.deleteGroup(store.selectedGroupId!, true)
+      },
+    }
   } else {
-    store.deleteGroup(store.selectedGroupId, false)
+    confirmState.value = {
+      show: true,
+      title: 'Delete Group',
+      message: `Delete empty group "${group?.name}"?`,
+      danger: true,
+      onConfirm: () => {
+        store.deleteGroup(store.selectedGroupId!, false)
+      },
+    }
   }
 }
 

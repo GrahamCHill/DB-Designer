@@ -114,7 +114,7 @@
         :read-only="props.readOnly && !props.interactive"
         @mousedown.stop="!props.readOnly && startTableDrag(table.id, $event)"
         @select="selectTable(table.id, $event)"
-        @start-relation="!props.readOnly && startRelation(table.id, $event)"
+        @start-relation="!props.readOnly && startRelation(table.id, $event.columnId, $event.event)"
         @end-relation="!props.readOnly && endRelation(table.id, $event)"
         @edit="!props.readOnly && (store.editingTableId = table.id)"
         @resize-start="!props.readOnly && startTableResize(table.id, $event)"
@@ -132,7 +132,7 @@
         :read-only="props.readOnly && !props.interactive"
         @mousedown.stop="!props.readOnly && startTableDrag(resource.id, $event)"
         @select="selectTable(resource.id, $event)"
-        @start-relation="!props.readOnly && startRelation(resource.id, $event)"
+        @start-relation="!props.readOnly && startRelation(resource.id, $event.columnId, $event.event)"
         @end-relation="!props.readOnly && endRelation(resource.id, $event)"
         @edit="!props.readOnly && (store.editingTableId = resource.id)"
       />
@@ -751,7 +751,9 @@ function requestDeleteRelation() {
 function confirmDelete() {
   const pending = confirmState.value
   confirmState.value = null
-  pending?.onConfirm()
+  if (pending?.onConfirm) {
+    pending.onConfirm()
+  }
 }
 
 function cancelDelete() {
@@ -1103,6 +1105,7 @@ function onCanvasMouseDown(e: MouseEvent) {
     target.classList.contains('canvas-content') ||
     target.classList.contains('relations-svg')
   if (isBackground) {
+    if (e.ctrlKey || e.metaKey || e.shiftKey) return
     store.selectedTableId    = null
     store.selectedRelationId = null
     store.selectedGroupId    = null
@@ -1213,13 +1216,37 @@ function createAtContext(kind: 'table' | 'group' | 'comment' | ResourceNodeType)
 function createPrefabAtContext(kind: 'rag' | 'audit') {
   if (!contextMenu.value) return
   const position = { x: contextMenu.value.canvasX, y: contextMenu.value.canvasY }
-  if (kind === 'rag') store.createRagSystem(position)
-  else store.createAuditSystem(position)
+  const title = kind === 'rag' ? 'Create RAG System' : 'Create Audit System'
+  const message = kind === 'rag'
+    ? 'This will create a production-ready RAG schema including documents, chunks, queries, and results tables. Continue?'
+    : 'This will create a robust audit system with events and changes tracking tables. Continue?'
+
+  confirmState.value = {
+    title,
+    message,
+    confirmLabel: 'Create',
+    cancelLabel: 'Cancel',
+    danger: false,
+    onConfirm: () => {
+      if (kind === 'rag') store.createRagSystem(position)
+      else store.createAuditSystem(position)
+    },
+  }
   contextMenu.value = null
 }
 
 function deleteComment(commentId: string) {
-  store.deleteComment(commentId)
+  const comment = store.schema.comments.find(c => c.id === commentId)
+  confirmState.value = {
+    title: 'Delete Comment',
+    message: 'Are you sure you want to delete this comment box?',
+    confirmLabel: 'Delete',
+    cancelLabel: 'Cancel',
+    danger: true,
+    onConfirm: () => {
+      store.deleteComment(commentId)
+    },
+  }
 }
 
 function pasteAtContext() {
@@ -1310,6 +1337,10 @@ function onMinimapNavigate(x: number, y: number) { pan.x = x; pan.y = y }
 // â”€â”€ Table drag â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function startTableDrag(tableId: string, e: MouseEvent) {
+  if (e.ctrlKey || e.metaKey || e.shiftKey) {
+    store.toggleTableSelection(tableId)
+    return
+  }
   const table = store.schema.tables.find(t => t.id === tableId)!
   const selectedTableIds = store.multiSelectedTableIds.size > 0
     ? [...store.multiSelectedTableIds]
@@ -1343,6 +1374,7 @@ function startTableDrag(tableId: string, e: MouseEvent) {
 }
 
 function startTableResize(tableId: string, e: MouseEvent) {
+  if (e.ctrlKey || e.metaKey || e.shiftKey) return
   const table = store.schema.tables.find(t => t.id === tableId)!
   selectTable(tableId)
   drag.value = {
@@ -1353,6 +1385,10 @@ function startTableResize(tableId: string, e: MouseEvent) {
 }
 
 function startCommentDrag(commentId: string, e: MouseEvent) {
+  if (e.ctrlKey || e.metaKey || e.shiftKey) {
+    store.toggleCommentSelection(commentId)
+    return
+  }
   const comment = store.schema.comments.find(entry => entry.id === commentId)
   if (!comment) return
   selectComment(commentId)
@@ -1367,6 +1403,7 @@ function startCommentDrag(commentId: string, e: MouseEvent) {
 }
 
 function startCommentResize(commentId: string, e: MouseEvent) {
+  if (e.ctrlKey || e.metaKey || e.shiftKey) return
   const comment = store.schema.comments.find(entry => entry.id === commentId)
   if (!comment) return
   selectComment(commentId)
@@ -1381,10 +1418,7 @@ function startCommentResize(commentId: string, e: MouseEvent) {
 }
 
 function selectTable(id: string, event?: MouseEvent) {
-  if (event && (event.ctrlKey || event.metaKey || event.shiftKey)) {
-    store.toggleTableSelection(id)
-    return
-  }
+  if (store.multiSelectedTableIds.has(id)) return
   store.clearMultiSelection()
   store.selectedTableId    = id
   store.selectedRelationId = null
@@ -1393,10 +1427,7 @@ function selectTable(id: string, event?: MouseEvent) {
 }
 
 function selectComment(id: string, event?: MouseEvent) {
-  if (event && (event.ctrlKey || event.metaKey || event.shiftKey)) {
-    store.toggleCommentSelection(id)
-    return
-  }
+  if (store.multiSelectedCommentIds.has(id)) return
   store.clearMultiSelection()
   store.selectedCommentId  = id
   store.selectedTableId    = null
@@ -1407,6 +1438,10 @@ function selectComment(id: string, event?: MouseEvent) {
 // â”€â”€ Group drag â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function startGroupDrag(groupId: string, e: MouseEvent) {
+  if (e.ctrlKey || e.metaKey || e.shiftKey) {
+    store.toggleGroupSelection(groupId)
+    return
+  }
   const group = store.schema.groups.find(g => g.id === groupId)!
   const selectedTableIds = store.multiSelectedTableIds.size > 0
     ? [...store.multiSelectedTableIds]
@@ -1468,10 +1503,7 @@ function startGroupDrag(groupId: string, e: MouseEvent) {
 }
 
 function selectGroup(id: string, event?: MouseEvent) {
-  if (event && (event.ctrlKey || event.metaKey || event.shiftKey)) {
-    store.toggleGroupSelection(id)
-    return
-  }
+  if (store.multiSelectedGroupIds.has(id)) return
   store.clearMultiSelection()
   store.selectedGroupId    = id
   store.selectedTableId    = null
@@ -1482,6 +1514,7 @@ function selectGroup(id: string, event?: MouseEvent) {
 // â”€â”€ Group resize â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function startGroupResize(groupId: string, e: MouseEvent) {
+  if (e.ctrlKey || e.metaKey || e.shiftKey) return
   const group = store.schema.groups.find(g => g.id === groupId)!
   drag.value = {
     kind: 'resize', id: groupId,
@@ -1535,7 +1568,11 @@ function removeRelationWaypoint(relationId: string, waypointIndex: number) {
 
 // â”€â”€ Relation drawing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-function startRelation(tableId: string, columnId: string) {
+function startRelation(tableId: string, columnId: string, e?: MouseEvent) {
+  if (e && (e.ctrlKey || e.metaKey || e.shiftKey)) {
+    store.toggleTableSelection(tableId)
+    return
+  }
   const pos = connectorPos(tableId, columnId, 'right')
   drawingRel.value = {
     fromTableId: tableId, fromColumnId: columnId,

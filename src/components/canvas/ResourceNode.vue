@@ -37,7 +37,7 @@
           class="connector connector-right"
           :class="{ connected: connectedAsSource.has(portId) }"
           title="Outbound dependency"
-          @mousedown.stop="$emit('start-relation', portId)"
+          @mousedown.stop="$emit('start-relation', { columnId: portId, event: $event })"
         />
       </div>
       <div v-if="table.comment" class="resource-comment">{{ table.comment }}</div>
