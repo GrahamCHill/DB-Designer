@@ -33,9 +33,6 @@
     ],
     "windows": {
       "certificateThumbprint": null
-    },
-    "macOS": {
-      "entitlements": null
     }
   }
 }

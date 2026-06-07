@@ -94,25 +94,6 @@ jobs:
               fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(config, null, 2));
             "
           fi
-
-          # Disable macOS signing if APPLE_CERTIFICATE is missing
-          if [ "${{ runner.os }}" == "macOS" ] && [ -z "${{ secrets.APPLE_CERTIFICATE }}" ]; then
-            echo "Disabling macOS signing because APPLE_CERTIFICATE is missing..."
-            node -e "
-              const fs = require('fs');
-              const config = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
-              if (config.bundle && config.bundle.macOS) {
-                delete config.bundle.macOS.signingIdentity;
-                delete config.bundle.macOS.notarization;
-              }
-              // Explicitly disable signing in tauri v2 by ensuring macOS bundle config exists but is empty
-              // tauri-action might still try to sign if it sees environment variables.
-              // We will also use a hack to prevent tauri-action from seeing the variables.
-              fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(config, null, 2));
-            "
-            # Set environment variables to empty for subsequent steps in this job
-            # However, env block in step overrides this.
-          fi
         env:
           T_WINDOWS_THUMBPRINT: ${{ secrets.TAURI_WINDOWS_CERT_THUMBPRINT }}
 
@@ -139,13 +120,6 @@ jobs:
         uses: tauri-apps/tauri-action@v0.6.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Only pass Apple secrets if APPLE_CERTIFICATE is present
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE || '' }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_SIGNING_IDENTITY || '' }}
-          APPLE_ID: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_ID || '' }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_TEAM_ID || '' }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
