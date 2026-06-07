@@ -1,3 +1,7 @@
+// DB Designer - Tauri Shell
+// Copyright (C) 2026 DB Designer Authors
+// Licensed under GNU GPL v3 with generated content exception (see LICENSE).
+
 mod db;
 
 #[tauri::command]
