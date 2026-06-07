@@ -782,7 +782,7 @@ export const useSchemaStore = defineStore('schema', () => {
       }
       lines.push('')
     }
-    return lines.join('\n')
+    return `${lines.join('\n').trim()}\n`
   }
 
   function exportMermaid(styled = true): string {
@@ -795,7 +795,7 @@ export const useSchemaStore = defineStore('schema', () => {
       childGroupsByParentId.set(key, [...current, group])
     }
 
-    const lines: string[] = ['flowchart RL']
+    const lines: string[] = ['flowchart LR']
     if (styled) {
       lines.push(
         '  classDef table fill:#13231d,stroke:#3ECF8E,color:#d7f8e7,stroke-width:1px;',
@@ -857,21 +857,85 @@ export const useSchemaStore = defineStore('schema', () => {
     renderGroup(null)
     lines.push('')
 
+    const resolveMermaidRelation = (
+      sourceTable: Table,
+      targetTable: Table,
+      sourceColumn: Column | undefined,
+      targetColumn: Column | undefined,
+    ) => {
+      const sourceNodeId = tableNodeIds.get(sourceTable.id)!
+      const targetNodeId = tableNodeIds.get(targetTable.id)!
+      const sourceIsResource = (sourceTable.kind ?? 'table') === 'resource'
+      const targetIsResource = (targetTable.kind ?? 'table') === 'resource'
+      const sourceOwnsKey = !!(sourceColumn && (sourceColumn.primaryKey || sourceColumn.unique))
+      const targetOwnsKey = !!(targetColumn && (targetColumn.primaryKey || targetColumn.unique))
+
+      // Stored relation meaning:
+      // source_table.source_column REFERENCES target_table.target_column
+      // For normal FK relations, Mermaid must render parent(target) --> child(source).
+      if (!sourceIsResource && !targetIsResource) {
+        return {
+          fromNodeId: targetNodeId,
+          toNodeId: sourceNodeId,
+          text: sourceColumn && targetColumn ? `${targetColumn.name} <- ${sourceColumn.name}` : '',
+        }
+      }
+
+      // Resource relations split into two cases:
+      // 1. table column stores/sends a value into the resource => table -> resource
+      // 2. resource owns a key referenced by a keyed table column => resource -> table
+      if (sourceIsResource && !targetIsResource) {
+        if (targetOwnsKey) {
+          return {
+            fromNodeId: sourceNodeId,
+            toNodeId: targetNodeId,
+            text: sourceColumn && targetColumn ? `${sourceColumn.name} -> ${targetColumn.name}` : '',
+          }
+        }
+        return {
+          fromNodeId: targetNodeId,
+          toNodeId: sourceNodeId,
+          text: sourceColumn && targetColumn ? `${targetColumn.name} -> ${sourceColumn.name}` : '',
+        }
+      }
+
+      if (targetIsResource && !sourceIsResource) {
+        if (sourceOwnsKey) {
+          return {
+            fromNodeId: targetNodeId,
+            toNodeId: sourceNodeId,
+            text: sourceColumn && targetColumn ? `${targetColumn.name} -> ${sourceColumn.name}` : '',
+          }
+        }
+        return {
+          fromNodeId: sourceNodeId,
+          toNodeId: targetNodeId,
+          text: sourceColumn && targetColumn ? `${sourceColumn.name} -> ${targetColumn.name}` : '',
+        }
+      }
+
+      // Resource-to-resource fallback: preserve stored direction.
+      return {
+        fromNodeId: sourceNodeId,
+        toNodeId: targetNodeId,
+        text: sourceColumn && targetColumn ? `${sourceColumn.name} -> ${targetColumn.name}` : '',
+      }
+    }
+
     for (const relation of s.relations) {
       const sourceTable = tableById.get(relation.sourceTableId)
       const targetTable = tableById.get(relation.targetTableId)
       if (!sourceTable || !targetTable) continue
 
-      const sourceNodeId = tableNodeIds.get(sourceTable.id)!
-      const targetNodeId = tableNodeIds.get(targetTable.id)!
       const sourceColumn = sourceTable.columns.find(column => column.id === relation.sourceColumnId)
       const targetColumn = targetTable.columns.find(column => column.id === relation.targetColumnId)
+      const relationDirection = resolveMermaidRelation(sourceTable, targetTable, sourceColumn, targetColumn)
       const relationText = [
         relation.label?.trim() || '',
-        sourceColumn && targetColumn ? `${sourceColumn.name} -> ${targetColumn.name}` : '',
+        relationDirection.text,
         relationLabel(relation.type),
       ].filter(Boolean).join(' | ')
-      lines.push(`  ${sourceNodeId} -->|"${escapeMermaidText(relationText)}"| ${targetNodeId}`)
+      lines.push(`  ${relationDirection.fromNodeId} -->|"${escapeMermaidText(relationText)}"| ${relationDirection.toNodeId}`)
     }
 
     return lines.join('\n')
