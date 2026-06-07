@@ -160,7 +160,7 @@
         @click="store.updateRelation(store.selectedRelationId!, { type: type.value })">
         {{ type.label }}
       </button>
-      <button class="rel-type-del" @click="store.deleteRelation(store.selectedRelationId!)">Delete Relation</button>
+      <button class="rel-type-del" @click="requestDeleteRelation()">Delete Relation</button>
     </div>
 
     <!-- Zoom controls -->
@@ -181,6 +181,17 @@
       :group="editingGroupData"
       @close="closeGroupEditor"
     />
+
+    <ConfirmDialog
+      v-if="confirmState"
+      :title="confirmState.title"
+      :message="confirmState.message"
+      :confirm-label="confirmState.confirmLabel"
+      :cancel-label="confirmState.cancelLabel"
+      :danger="confirmState.danger"
+      @confirm="confirmDelete"
+      @cancel="cancelDelete"
+    />
   </div>
 </template>
 
@@ -192,6 +203,7 @@ import ResourceNode from './ResourceNode.vue'
 import GroupNode from './GroupNode.vue'
 import MinimapPanel from './MinimapPanel.vue'
 import GroupEditorModal from '../modals/GroupEditorModal.vue'
+import ConfirmDialog from '../modals/ConfirmDialog.vue'
 import type { Relation, RelationType, ResourceNodeType } from '../../types'
 import { TABLE_WIDTH, TABLE_HEADER_H, TABLE_COL_PAD_TOP, TABLE_ROW_H } from '../../types'
 import { getDescendants } from '../../composables/useContainment'
@@ -211,6 +223,14 @@ const contextMenu = ref<{ x: number; y: number; canvasX: number; canvasY: number
 const canvasEl = ref<HTMLDivElement>()
 const canvasW  = ref(800)
 const canvasH  = ref(600)
+const confirmState = ref<null | {
+  title: string
+  message: string
+  confirmLabel: string
+  cancelLabel: string
+  danger: boolean
+  onConfirm: () => void
+}>(null)
 
 defineEmits<{
   'generate-api': [table: any]
@@ -223,6 +243,7 @@ type CanvasShortcutWindow = Window & {
 const onKeyDown = (e: KeyboardEvent) => {
   const tag = (e.target as HTMLElement).tagName.toLowerCase()
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+  if (document.querySelector('.modal-overlay, .type-picker-overlay')) return
   if (e.repeat && (e.ctrlKey || e.metaKey)) {
     const repeatedKey = e.key.toLowerCase()
     if (repeatedKey === 'a' || repeatedKey === 'c' || repeatedKey === 'v' || repeatedKey === 'y' || repeatedKey === 'z') {
@@ -257,6 +278,7 @@ const onKeyDown = (e: KeyboardEvent) => {
     return
   }
   if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault()
     const selectedTableIds = store.multiSelectedTableIds.size > 0
       ? [...store.multiSelectedTableIds]
       : store.selectedTableId
@@ -272,99 +294,39 @@ const onKeyDown = (e: KeyboardEvent) => {
       const message = selectedTableIds.length === 1
         ? `Delete "${store.schema.tables.find(table => table.id === selectedTableIds[0])?.name ?? 'selected item'}"?`
         : `Delete ${selectedTableIds.length} selected table/resource item(s)?`
-      if (confirm(message)) {
-        for (const tableId of selectedTableIds) store.deleteTable(tableId)
-        store.clearMultiSelection()
+      confirmState.value = {
+        title: 'Delete Item',
+        message,
+        confirmLabel: 'Delete',
+        cancelLabel: 'Cancel',
+        danger: true,
+        onConfirm: () => {
+          for (const tableId of selectedTableIds) store.deleteTable(tableId)
+          store.clearMultiSelection()
+        },
       }
-      e.preventDefault()
     } else if (selectedGroupIds.length > 0) {
       const message = selectedGroupIds.length === 1
         ? `Delete group "${store.schema.groups.find(group => group.id === selectedGroupIds[0])?.name ?? 'selected group'}"?`
         : `Delete ${selectedGroupIds.length} selected group(s)?`
-      if (confirm(message)) {
-        for (const groupId of selectedGroupIds) store.deleteGroup(groupId, false)
-        store.clearMultiSelection()
+      confirmState.value = {
+        title: 'Delete Group',
+        message,
+        confirmLabel: 'Delete',
+        cancelLabel: 'Cancel',
+        danger: true,
+        onConfirm: () => {
+          for (const groupId of selectedGroupIds) store.deleteGroup(groupId, false)
+          store.clearMultiSelection()
+        },
       }
-      e.preventDefault()
     } else if (store.selectedRelationId) {
-      if (confirm('Delete selected relation?')) {
-        store.deleteRelation(store.selectedRelationId)
-      }
-      e.preventDefault()
+      requestDeleteRelation()
     }
   }
 }
 
 onMounted(() => {
-  // Delete key removes selected table or relation; standard shortcuts work on the canvas selection.
-  const legacyOnKeyDown = (e: KeyboardEvent) => {
-    const tag = (e.target as HTMLElement).tagName.toLowerCase()
-    if (tag === 'input' || tag === 'textarea' || tag === 'select') return
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
-      store.selectAllCanvas()
-      e.preventDefault()
-      return
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-      if (e.shiftKey) store.redo()
-      else store.undo()
-      e.preventDefault()
-      return
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
-      store.redo()
-      e.preventDefault()
-      return
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
-      store.copySelectedCanvasItems()
-      e.preventDefault()
-      return
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
-      store.pasteCopiedCanvasItems()
-      e.preventDefault()
-      return
-    }
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      const selectedTableIds = store.multiSelectedTableIds.size > 0
-        ? [...store.multiSelectedTableIds]
-        : store.selectedTableId
-          ? [store.selectedTableId]
-          : []
-      const selectedGroupIds = store.multiSelectedGroupIds.size > 0
-        ? [...store.multiSelectedGroupIds]
-        : store.selectedGroupId
-          ? [store.selectedGroupId]
-          : []
-
-      if (selectedTableIds.length > 0) {
-        const message = selectedTableIds.length === 1
-          ? `Delete "${store.schema.tables.find(table => table.id === selectedTableIds[0])?.name ?? 'selected item'}"?`
-          : `Delete ${selectedTableIds.length} selected table/resource item(s)?`
-        if (confirm(message)) {
-          for (const tableId of selectedTableIds) store.deleteTable(tableId)
-          store.clearMultiSelection()
-        }
-        e.preventDefault()
-      } else if (selectedGroupIds.length > 0) {
-        const message = selectedGroupIds.length === 1
-          ? `Delete group "${store.schema.groups.find(group => group.id === selectedGroupIds[0])?.name ?? 'selected group'}"?`
-          : `Delete ${selectedGroupIds.length} selected group(s)?`
-        if (confirm(message)) {
-          for (const groupId of selectedGroupIds) store.deleteGroup(groupId, false)
-          store.clearMultiSelection()
-        }
-        e.preventDefault()
-      } else if (store.selectedRelationId) {
-        if (confirm('Delete selected relation?')) {
-          store.deleteRelation(store.selectedRelationId)
-        }
-        e.preventDefault()
-      }
-    }
-  }
-  void legacyOnKeyDown
   if (!props.readOnly) {
     const canvasWindow = window as CanvasShortcutWindow
     if (canvasWindow.__dbDesignerCanvasKeyHandler) {
@@ -649,6 +611,31 @@ const drawingRelPath = computed(() => {
 const selectedRelData = computed(() =>
   store.schema.relations.find(r => r.id === store.selectedRelationId) ?? null
 )
+
+function requestDeleteRelation() {
+  const relationId = store.selectedRelationId
+  if (!relationId) return
+  confirmState.value = {
+    title: 'Delete Relation',
+    message: 'Delete selected relation?',
+    confirmLabel: 'Delete',
+    cancelLabel: 'Cancel',
+    danger: true,
+    onConfirm: () => {
+      store.deleteRelation(relationId)
+    },
+  }
+}
+
+function confirmDelete() {
+  const pending = confirmState.value
+  confirmState.value = null
+  pending?.onConfirm()
+}
+
+function cancelDelete() {
+  confirmState.value = null
+}
 
 const relationValidationById = computed(() => {
   const map = new Map<string, {
