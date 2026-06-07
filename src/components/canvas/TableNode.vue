@@ -26,7 +26,6 @@
       </div>
       <div class="header-actions">
         <button v-if="!readOnly" class="icon-btn" @click.stop="$emit('edit')"   title="Edit table">Edit</button>
-        <button v-if="!readOnly" class="icon-btn danger" @click.stop="$emit('delete')" title="Delete table">Del</button>
         <button v-if="readOnly" class="icon-btn primary" @click.stop="$emit('generate-api', table)" title="Generate API for this table">API</button>
       </div>
     </div>
@@ -116,7 +115,6 @@ defineEmits<{
   mousedown:      [e: MouseEvent]
   select:         [e: MouseEvent]
   edit:           []
-  delete:         []
   'start-relation': [columnId: string]
   'end-relation':   [columnId: string]
   'resize-start':   [e: MouseEvent]

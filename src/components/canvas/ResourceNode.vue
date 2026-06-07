@@ -18,8 +18,7 @@
         <span class="resource-name">{{ table.name }}</span>
       </div>
       <div class="resource-actions">
-        <button v-if="!readOnly" class="icon-btn" @click.stop="$emit('edit')" title="Edit resource">E</button>
-        <button v-if="!readOnly" class="icon-btn danger" @click.stop="$emit('delete')" title="Delete resource">X</button>
+        <button v-if="!readOnly" class="icon-btn" @click.stop="$emit('edit')" title="Edit resource">Edit</button>
       </div>
     </div>
 
@@ -63,7 +62,6 @@ defineEmits<{
   mousedown: [e: MouseEvent]
   select: [e: MouseEvent]
   edit: []
-  delete: []
   'start-relation': [columnId: string]
   'end-relation': [columnId: string]
 }>()
@@ -125,6 +123,7 @@ function hexToRgb(hex: string): string {
 .resource-copy {
   display: flex;
   flex-direction: column;
+  gap: 5px;
   min-width: 0;
 }
 .resource-kicker {
@@ -153,14 +152,21 @@ function hexToRgb(hex: string): string {
   opacity: 1;
 }
 .icon-btn {
-  width: 22px;
-  height: 22px;
+  background: none;
   border: none;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  color: #cbd5e1;
+  color: #666;
   cursor: pointer;
+  font-size: 9px;
+  min-width: 32px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
 }
+.icon-btn:hover { color: #fff; background: #2a2a35; }
 .icon-btn.danger:hover { color: #f87171; }
 .resource-body {
   padding: 0 14px 14px;

@@ -23,16 +23,10 @@
       <div class="ws-right">
         <button
           v-if="workspaceStore.active === 'db'"
-          class="ws-action-btn"
-          title="Export diagram as PNG"
-          @click="exportPng('png')"
-        >Save PNG</button>
-        <button
-          v-if="workspaceStore.active === 'db'"
-          class="ws-action-btn"
-          title="Export diagram as JPG"
-          @click="exportPng('jpg')"
-        >Save JPG</button>
+          class="ws-action-btn ws-action-btn-primary"
+          title="Export diagram"
+          @click="showExportModal = true"
+        >Export Diagram</button>
 
         <button
           v-if="workspaceStore.active === 'query'"
@@ -137,6 +131,11 @@
       @close="closeTableEditor"
     />
     <DBConnectModal v-if="showDBConnect" @close="showDBConnect = false" />
+    <DiagramExportModal
+      v-if="showExportModal"
+      :export-image="exportPng"
+      @close="showExportModal = false"
+    />
 
   </div>
 </template>
@@ -216,6 +215,7 @@ import TabBar from './components/canvas/TabBar.vue'
 import DiagramCanvas from './components/canvas/DiagramCanvas.vue'
 import TableEditorModal from './components/modals/TableEditorModal.vue'
 import DBConnectModal from './components/modals/DBConnectModal.vue'
+import DiagramExportModal from './components/modals/DiagramExportModal.vue'
 import ApiSidebar from './components/api-sidebar/ApiSidebar.vue'
 import ApiCanvas from './components/canvas/api-canvas/ApiCanvas.vue'
 import ApiOverviewPanel from './components/api-panels/ApiOverviewPanel.vue'
@@ -232,6 +232,7 @@ type ExportTheme = 'dark' | 'light'
 
 const store = useSchemaStore()
 const showDBConnect = ref(false)
+const showExportModal = ref(false)
 const editingTable = computed(() => store.schema.tables.find(t => t.id === store.editingTableId) ?? null)
 const codegenPanel = ref<CodegenPanelExposed | null>(null)
 ;(window as any).__dbDesignerShowConnect = () => { showDBConnect.value = true }
@@ -438,6 +439,7 @@ async function exportPng(format: 'png' | 'jpg') {
     mimeType,
   })
 }
+
 </script>
 
 <style>
@@ -475,6 +477,17 @@ body { font-family: 'JetBrains Mono', 'Fira Code', monospace; background: #0f0f1
   transition: color 0.15s, border-color 0.15s;
 }
 .ws-action-btn:hover { color: #3ECF8E; border-color: #3ECF8E50; }
+.ws-action-btn-primary {
+  background: #1b2d23;
+  border-color: #3ECF8E66;
+  color: #b8f5d3;
+  box-shadow: inset 0 0 0 1px rgba(62, 207, 142, 0.12);
+}
+.ws-action-btn-primary:hover {
+  color: #f0fff7;
+  border-color: #3ECF8E;
+  background: #21402f;
+}
 
 /* ── Content ── */
 .workspace-content { flex: 1; overflow: hidden; position: relative; }

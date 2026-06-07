@@ -105,7 +105,6 @@
         @start-relation="!props.readOnly && startRelation(table.id, $event)"
         @end-relation="!props.readOnly && endRelation(table.id, $event)"
         @edit="!props.readOnly && (store.editingTableId = table.id)"
-        @delete="!props.readOnly && store.deleteTable(table.id)"
         @resize-start="!props.readOnly && startTableResize(table.id, $event)"
         @generate-api="$emit('generate-api', $event)"
       />
@@ -124,7 +123,6 @@
         @start-relation="!props.readOnly && startRelation(resource.id, $event)"
         @end-relation="!props.readOnly && endRelation(resource.id, $event)"
         @edit="!props.readOnly && (store.editingTableId = resource.id)"
-        @delete="!props.readOnly && store.deleteTable(resource.id)"
       />
     </div>
 
@@ -227,10 +225,21 @@ const onKeyDown = (e: KeyboardEvent) => {
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return
   if (e.repeat && (e.ctrlKey || e.metaKey)) {
     const repeatedKey = e.key.toLowerCase()
-    if (repeatedKey === 'a' || repeatedKey === 'c' || repeatedKey === 'v') {
+    if (repeatedKey === 'a' || repeatedKey === 'c' || repeatedKey === 'v' || repeatedKey === 'y' || repeatedKey === 'z') {
       e.preventDefault()
       return
     }
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    if (e.shiftKey) store.redo()
+    else store.undo()
+    e.preventDefault()
+    return
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+    store.redo()
+    e.preventDefault()
+    return
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
     store.selectAllCanvas()
@@ -293,6 +302,17 @@ onMounted(() => {
     if (tag === 'input' || tag === 'textarea' || tag === 'select') return
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
       store.selectAllCanvas()
+      e.preventDefault()
+      return
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      if (e.shiftKey) store.redo()
+      else store.undo()
+      e.preventDefault()
+      return
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+      store.redo()
       e.preventDefault()
       return
     }

@@ -26,7 +26,7 @@
           <span class="line-count">{{ lineCount }} lines</span>
           <div class="footer-actions">
             <button class="btn-copy" @click="copy">
-              {{ copied ? '✓ Copied!' : '⎘ Copy' }}
+              {{ copied ? 'Copied' : 'Copy' }}
             </button>
             <button class="btn-download" @click="download">Download .sql</button>
           </div>
@@ -91,18 +91,19 @@ async function download() {
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  padding: 18px;
 }
 
 .modal {
   background: #16161a;
   border: 1px solid #2a2a35;
   border-radius: 12px;
-  width: 680px;
-  max-width: 95vw;
-  max-height: 80vh;
+  width: min(680px, 100%);
+  max-height: min(820px, calc(100vh - 36px));
   display: flex;
   flex-direction: column;
   box-shadow: 0 24px 80px #00000090;
+  overflow: hidden;
 }
 
 .modal-header {
@@ -111,6 +112,7 @@ async function download() {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex-shrink: 0;
 }
 
 .modal-title {
@@ -121,7 +123,7 @@ async function download() {
 
 .modal-sub {
   font-size: 11px;
-  color: #444;
+  color: #666;
   font-family: monospace;
 }
 
@@ -137,7 +139,7 @@ async function download() {
 .dialect-tab {
   background: none;
   border: none;
-  color: #555;
+  color: #666;
   font-size: 12px;
   padding: 5px 12px;
   border-radius: 5px;
@@ -153,7 +155,7 @@ async function download() {
 .close-btn {
   background: none;
   border: none;
-  color: #444;
+  color: #666;
   font-size: 16px;
   cursor: pointer;
   padding: 4px 8px;
@@ -165,6 +167,7 @@ async function download() {
 
 .modal-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 0;
 }
@@ -177,7 +180,7 @@ async function download() {
   padding: 20px;
   font-size: 12.5px;
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: #c0d0c0;
+  color: #d7efe2;
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-all;
@@ -189,11 +192,13 @@ async function download() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .line-count {
   font-size: 11px;
-  color: #444;
+  color: #666;
 }
 
 .footer-actions {
@@ -204,7 +209,7 @@ async function download() {
 .btn-copy {
   background: #1e1e28;
   border: 1px solid #2a2a35;
-  color: #888;
+  color: #cbd5e1;
   border-radius: 7px;
   padding: 7px 16px;
   font-size: 12px;
@@ -213,7 +218,7 @@ async function download() {
 }
 
 .btn-copy:hover {
-  color: #e0e0e0;
+  color: #ffffff;
 }
 
 .btn-download {
@@ -230,4 +235,3 @@ async function download() {
 
 .btn-download:hover { background: #45e09a; }
 </style>
-

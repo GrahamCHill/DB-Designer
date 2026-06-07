@@ -103,14 +103,17 @@ function deleteGroup() {
   align-items: center;
   justify-content: center;
   z-index: 2000;
+  padding: 18px;
 }
 
 .modal {
   background: #16161a;
   border: 1px solid #2a2a35;
   border-radius: 12px;
-  width: 420px;
-  max-width: 95vw;
+  width: min(420px, 100%);
+  max-height: min(760px, calc(100vh - 36px));
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 24px 80px #00000099;
   overflow: hidden;
 }
@@ -121,6 +124,7 @@ function deleteGroup() {
   justify-content: space-between;
   padding: 14px 18px;
   border-bottom: 1px solid #1e1e28;
+  flex-shrink: 0;
 }
 
 .modal-title {
@@ -143,6 +147,9 @@ function deleteGroup() {
 
 .modal-body {
   padding: 16px 18px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .field-label {
@@ -251,6 +258,8 @@ function deleteGroup() {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .footer-right { display: flex; gap: 8px; }

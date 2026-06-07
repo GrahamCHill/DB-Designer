@@ -25,7 +25,7 @@
           </div>
         </div>
 
-        <div class="modal-body">
+        <div class="modal-body" :class="{ 'table-editor-body': !isResource }">
           <div class="table-settings-row">
             <label class="table-setting">
               <input v-model="localTable.immutable" type="checkbox" />
@@ -60,148 +60,155 @@
             <span class="type-filter-value">{{ activeDialectLabel }}</span>
           </div>
 
-          <div class="columns-header">
-            <span class="col-head" style="width:24px"></span>
-            <span class="col-head" style="flex:1.5">Column Name</span>
-            <span class="col-head" style="flex:1">Type</span>
-            <span class="col-head" style="width:140px">Array Element</span>
-            <span class="col-head center" style="width:28px" title="Type help">?</span>
-            <span class="col-head center" style="width:36px" title="Primary Key">PK</span>
-            <span class="col-head center" style="width:36px" title="Not Null">NN</span>
-            <span class="col-head center" style="width:36px" title="Unique">UQ</span>
-            <span class="col-head center" style="width:42px" title="Immutable">IMM</span>
-            <span class="col-head" style="flex:1">Default</span>
-            <span class="col-head center" style="width:88px" title="Suggested defaults">Preset</span>
-            <span class="col-head" style="width:32px"></span>
-          </div>
-
-          <div class="column-tools-row">
-            <button class="add-col-btn inline" @click="addColumn">+ Add Column</button>
-            <select
-              class="col-input column-preset-select"
-              :value="selectedColumnPreset"
-              @change="selectedColumnPreset = ($event.target as HTMLSelectElement).value; addColumnPreset()"
-            >
-              <option value="">Add Common Columns</option>
-              <option
-                v-for="preset in columnPresets"
-                :key="preset.id"
-                :value="preset.id"
-                :title="preset.description"
-              >{{ preset.label }}</option>
-            </select>
-          </div>
-
-          <draggable-list :columns="localTable.columns" @update="localTable.columns = $event">
-            <template #default="{ col, index }">
-              <div
-                :key="col.id"
-                class="column-editor-row"
-                :class="{
-                  'drag-source': draggingColumnId === col.id,
-                  'drop-target': dropBeforeColumnId === col.id,
-                }"
-                draggable="true"
-                @dragstart="onColumnDragStart($event, col.id)"
-                @dragenter.prevent="onColumnDragOver(col.id)"
-                @dragover.prevent="onColumnDragOver(col.id)"
-                @drop.prevent="onColumnDrop(col.id)"
-                @dragend="onColumnDragEnd"
-              >
-                <span class="drag-handle" title="Drag to reorder">::</span>
-
-                <input
-                  v-model="col.name"
-                  class="col-input"
-                  style="flex:1.5"
-                  placeholder="column_name"
-                />
-
-                <button
-                  :ref="el => setTypeTriggerRef(col.id, el)"
-                  type="button"
-                  class="col-input col-type-select type-picker-trigger"
-                  style="flex:1"
-                  :title="getTypeDescription(col.type)"
-                  @click="openTypePicker(col.id)"
-                >
-                  <span class="type-picker-value">{{ getDisplayType(col.type) }}</span>
-                  <span class="type-picker-caret">v</span>
-                </button>
-
+          <div class="columns-panel">
+            <div class="columns-sticky">
+              <div class="column-tools-row column-tools-row-top">
                 <select
-                  v-if="showArrayTypeSelector(col.type)"
-                  class="col-input col-type-select array-type-select"
-                  :value="getArrayElementType(col.type)"
-                  title="Select the element type stored in this array"
-                  @change="onArrayElementTypeChange(col, ($event.target as HTMLSelectElement).value)"
+                  class="col-input column-preset-select"
+                  :value="selectedColumnPreset"
+                  @change="selectedColumnPreset = ($event.target as HTMLSelectElement).value; addColumnPreset()"
                 >
+                  <option value="">Add Common Columns</option>
                   <option
-                    v-for="type in arrayElementOptions"
-                    :key="type.value"
-                    :value="type.value"
-                    :title="type.description"
-                  >{{ type.label }}</option>
-                </select>
-                <span v-else class="array-type-placeholder"></span>
-
-                <button
-                  class="type-help-btn"
-                  type="button"
-                  :title="getTypeDescription(col.type)"
-                >?</button>
-
-                <input
-                  v-model="col.primaryKey"
-                  type="checkbox"
-                  class="col-check"
-                  @change="if (col.primaryKey) { col.nullable = false; col.unique = true }"
-                />
-                <input
-                  :checked="!col.nullable"
-                  type="checkbox"
-                  class="col-check"
-                  :disabled="col.primaryKey"
-                  :title="col.nullable ? 'Allow NULL values' : 'Emit NOT NULL in SQL'"
-                  @change="col.nullable = !(($event.target as HTMLInputElement).checked)"
-                />
-                <input
-                  v-model="col.unique"
-                  type="checkbox"
-                  class="col-check"
-                  :disabled="col.primaryKey"
-                />
-                <input
-                  v-model="col.immutable"
-                  type="checkbox"
-                  class="col-check"
-                />
-
-                <input
-                  v-model="col.defaultValue"
-                  class="col-input"
-                  style="flex:1"
-                  placeholder="default..."
-                />
-
-                <select
-                  class="col-input default-preset-select"
-                  :value="defaultPresetByColumn[col.id] ?? ''"
-                  :disabled="defaultPresetsForColumn(col).length === 0"
-                  @change="onDefaultPresetSelected(col, ($event.target as HTMLSelectElement).value)"
-                >
-                  <option value="">Preset</option>
-                  <option
-                    v-for="preset in defaultPresetsForColumn(col)"
-                    :key="preset.value"
-                    :value="preset.value"
+                    v-for="preset in columnPresets"
+                    :key="preset.id"
+                    :value="preset.id"
+                    :title="preset.description"
                   >{{ preset.label }}</option>
                 </select>
-
-                <button class="del-col-btn" title="Delete column" @click="removeColumn(index)">X</button>
               </div>
-            </template>
-          </draggable-list>
+
+              <div class="columns-header">
+                <span class="col-head" style="width:24px"></span>
+                <span class="col-head" style="flex:1.5">Column Name</span>
+                <span class="col-head" style="flex:1">Type</span>
+                <span class="col-head" style="width:140px">Array Element</span>
+                <span class="col-head center" style="width:28px" title="Type help">?</span>
+                <span class="col-head center" style="width:36px" title="Primary Key">PK</span>
+                <span class="col-head center" style="width:36px" title="Not Null">NN</span>
+                <span class="col-head center" style="width:36px" title="Unique">UQ</span>
+                <span class="col-head center" style="width:42px" title="Immutable">IMM</span>
+                <span class="col-head" style="flex:1">Default</span>
+                <span class="col-head center" style="width:88px" title="Suggested defaults">Preset</span>
+                <span class="col-head" style="width:32px"></span>
+              </div>
+            </div>
+
+            <div class="columns-scroll">
+              <draggable-list :columns="localTable.columns" @update="localTable.columns = $event">
+                <template #default="{ col, index }">
+                  <div
+                    :key="col.id"
+                    class="column-editor-row"
+                    :class="{
+                      'drag-source': draggingColumnId === col.id,
+                      'drop-target': dropBeforeColumnId === col.id,
+                    }"
+                    draggable="true"
+                    @dragstart="onColumnDragStart($event, col.id)"
+                    @dragenter.prevent="onColumnDragOver(col.id)"
+                    @dragover.prevent="onColumnDragOver(col.id)"
+                    @drop.prevent="onColumnDrop(col.id)"
+                    @dragend="onColumnDragEnd"
+                  >
+                    <span class="drag-handle" title="Drag to reorder">::</span>
+
+                    <input
+                      v-model="col.name"
+                      class="col-input"
+                      style="flex:1.5"
+                      placeholder="column_name"
+                    />
+
+                    <button
+                      :ref="el => setTypeTriggerRef(col.id, el)"
+                      type="button"
+                      class="col-input col-type-select type-picker-trigger"
+                      style="flex:1"
+                      :title="getTypeDescription(col.type)"
+                      @click="openTypePicker(col.id)"
+                    >
+                      <span class="type-picker-value">{{ getDisplayType(col.type) }}</span>
+                      <span class="type-picker-caret">v</span>
+                    </button>
+
+                    <select
+                      v-if="showArrayTypeSelector(col.type)"
+                      class="col-input col-type-select array-type-select"
+                      :value="getArrayElementType(col.type)"
+                      title="Select the element type stored in this array"
+                      @change="onArrayElementTypeChange(col, ($event.target as HTMLSelectElement).value)"
+                    >
+                      <option
+                        v-for="type in arrayElementOptions"
+                        :key="type.value"
+                        :value="type.value"
+                        :title="type.description"
+                      >{{ type.label }}</option>
+                    </select>
+                    <span v-else class="array-type-placeholder"></span>
+
+                    <button
+                      class="type-help-btn"
+                      type="button"
+                      :title="getTypeDescription(col.type)"
+                    >?</button>
+
+                    <input
+                      v-model="col.primaryKey"
+                      type="checkbox"
+                      class="col-check"
+                      @change="if (col.primaryKey) { col.nullable = false; col.unique = true }"
+                    />
+                    <input
+                      :checked="!col.nullable"
+                      type="checkbox"
+                      class="col-check"
+                      :disabled="col.primaryKey"
+                      :title="col.nullable ? 'Allow NULL values' : 'Emit NOT NULL in SQL'"
+                      @change="col.nullable = !(($event.target as HTMLInputElement).checked)"
+                    />
+                    <input
+                      v-model="col.unique"
+                      type="checkbox"
+                      class="col-check"
+                      :disabled="col.primaryKey"
+                    />
+                    <input
+                      v-model="col.immutable"
+                      type="checkbox"
+                      class="col-check"
+                    />
+
+                    <input
+                      v-model="col.defaultValue"
+                      class="col-input"
+                      style="flex:1"
+                      placeholder="default..."
+                    />
+
+                    <select
+                      class="col-input default-preset-select"
+                      :value="defaultPresetByColumn[col.id] ?? ''"
+                      :disabled="defaultPresetsForColumn(col).length === 0"
+                      @change="onDefaultPresetSelected(col, ($event.target as HTMLSelectElement).value)"
+                    >
+                      <option value="">Preset</option>
+                      <option
+                        v-for="preset in defaultPresetsForColumn(col)"
+                        :key="preset.value"
+                        :value="preset.value"
+                      >{{ preset.label }}</option>
+                    </select>
+
+                    <button class="del-col-btn" title="Delete column" @click="removeColumn(index)">X</button>
+                  </div>
+                </template>
+              </draggable-list>
+
+              <button class="add-col-btn" @click="addColumn">+ Add Column</button>
+            </div>
+          </div>
           </template>
         </div>
 
@@ -830,15 +837,15 @@ function deleteTable() {
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  padding: 18px;
 }
 
 .modal {
   background: #16161a;
   border: 1px solid #2a2a35;
   border-radius: 12px;
-  width: 980px;
-  max-width: 96vw;
-  max-height: 88vh;
+  width: min(980px, 100%);
+  max-height: min(900px, calc(100vh - 36px));
   display: flex;
   flex-direction: column;
   box-shadow: 0 24px 80px #00000090;
@@ -851,6 +858,7 @@ function deleteTable() {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex-shrink: 0;
 }
 
 .modal-title-row {
@@ -898,8 +906,15 @@ function deleteTable() {
 
 .modal-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: 16px 20px;
+}
+
+.table-editor-body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .modal-body::-webkit-scrollbar,
@@ -974,6 +989,48 @@ function deleteTable() {
   letter-spacing: 0.04em;
 }
 
+.columns-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid #1e1e28;
+}
+
+.columns-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a35 #16161a;
+}
+
+.columns-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.columns-scroll::-webkit-scrollbar-track {
+  background: #16161a;
+}
+
+.columns-scroll::-webkit-scrollbar-thumb {
+  background: #2a2a35;
+  border-radius: 999px;
+  border: 2px solid #16161a;
+}
+
+.columns-sticky {
+  position: relative;
+  z-index: 12;
+  flex-shrink: 0;
+  padding: 12px 0 4px;
+  background: #16161a;
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.2);
+}
+
 .columns-header,
 .column-editor-row {
   display: flex;
@@ -992,6 +1049,11 @@ function deleteTable() {
   align-items: center;
   gap: 10px;
   margin-bottom: 10px;
+}
+
+.column-tools-row-top {
+  justify-content: flex-start;
+  margin-bottom: 14px;
 }
 
 .col-head.center {
@@ -1171,6 +1233,8 @@ function deleteTable() {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .footer-right {

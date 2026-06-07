@@ -66,10 +66,6 @@
           <input type="checkbox" v-model="store.showMinimap" />
           <span>Show Minimap</span>
         </label>
-        <label class="view-option">
-          <input type="checkbox" v-model="store.lightExportMode" />
-          <span>Light Export Images</span>
-        </label>
       </div>
     </div>
 
@@ -273,7 +269,7 @@
     <!-- Export + Connect -->
     <div class="sidebar-section">
       <button class="btn-export" @click="showExport = true">Export SQL</button>
-      <button class="btn-connect" @click="openDBConnect" style="margin-top:6px">Connect to DB</button>
+      <button class="btn-connect" @click="openDBConnect">Connect to DB</button>
     </div>
 
     <!-- Footer -->
@@ -281,7 +277,6 @@
       <span class="autosave-indicator">auto-saved</span>
       <span class="sidebar-version">{{ appVersionLabel }}</span>
     </div>
-
 
     <ExportModal v-if="showExport" @close="showExport = false" />
   </aside>
@@ -758,6 +753,7 @@ function loadFile(e: Event) {
 .btn-export:hover { background: #1e3028; }
 
 .btn-connect {
+  margin-top: 8px;
   width: 100%; background: #1a1a28; border: 1px solid #3B82F640;
   color: #3B82F6; border-radius: 7px; padding: 8px; font-size: 12px;
   font-weight: 600; cursor: pointer; transition: background 0.15s;

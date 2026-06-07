@@ -225,13 +225,17 @@ async function browseSQLite() {
   backdrop-filter: blur(4px);
   display: flex; align-items: center; justify-content: center;
   z-index: 2000;
+  padding: 18px;
 }
 
 .modal {
   background: #16161a;
   border: 1px solid #2a2a35;
   border-radius: 12px;
-  width: 540px; max-width: 95vw;
+  width: min(540px, 100%);
+  max-height: min(820px, calc(100vh - 36px));
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 24px 80px #00000099;
   overflow: hidden;
 }
@@ -239,6 +243,7 @@ async function browseSQLite() {
 .modal-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 20px; border-bottom: 1px solid #1e1e28;
+  flex-shrink: 0;
 }
 
 .header-left { display: flex; align-items: center; gap: 12px; }
@@ -252,7 +257,15 @@ async function browseSQLite() {
 }
 .close-btn:hover { color: #e0e0e0; }
 
-.modal-body { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.modal-body {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
 
 .dialect-row { display: flex; gap: 6px; }
 
@@ -309,6 +322,8 @@ async function browseSQLite() {
 .modal-footer {
   padding: 14px 20px; border-top: 1px solid #1e1e28;
   display: flex; justify-content: space-between; align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
 }
 .footer-right { display: flex; gap: 8px; }
 
