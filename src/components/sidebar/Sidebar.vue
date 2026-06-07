@@ -469,14 +469,14 @@ const targetTable = computed(() => store.schema.tables.find(t => t.id === select
 const targetCol   = computed(() => targetTable.value?.columns.find(c => c.id === selectedRelation.value?.targetColumnId))
 
 function confirmDeleteTable() {
-  if (store.selectedTableId) {
+  if (store.selectedTableId && store.selectedTable) {
     confirmState.value = {
       show: true,
       title: 'Delete Table',
-      message: `Are you sure you want to delete "${store.selectedTable?.name}"?`,
+      message: `Are you sure you want to delete "${store.selectedTable.name}"?`,
       danger: true,
       onConfirm: () => {
-        store.deleteTable(store.selectedTableId)
+        store.deleteTable(store.selectedTableId!)
       },
     }
   }

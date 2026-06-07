@@ -62,7 +62,7 @@ defineEmits<{
   mousedown: [e: MouseEvent]
   select: [e: MouseEvent]
   edit: []
-  'start-relation': [columnId: string]
+  'start-relation': [data: { columnId: string, event: MouseEvent }]
   'end-relation': [columnId: string]
 }>()
 

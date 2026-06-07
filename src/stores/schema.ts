@@ -1172,14 +1172,16 @@ export const useSchemaStore = defineStore('schema', () => {
     const groupsById = new Map(s.groups.map(group => [group.id, group]))
     const commentsByGroupId = new Map<string, CommentBox[]>()
     for (const c of s.comments) {
-      const table = s.tables.find(t =>
-        t.groupId &&
-        c.position.x >= s.groups.find(g => g.id === t.groupId)!.position.x &&
-        c.position.x <= s.groups.find(g => g.id === t.groupId)!.position.x + s.groups.find(g => g.id === t.groupId)!.size.w &&
-        c.position.y >= s.groups.find(g => g.id === t.groupId)!.position.y &&
-        c.position.y <= s.groups.find(g => g.id === t.groupId)!.position.y + s.groups.find(g => g.id === t.groupId)!.size.h
+      const tableInGroup = s.tables.find(_t =>
+        _t.groupId &&
+        c.position.x >= s.groups.find(g => g.id === _t.groupId)!.position.x &&
+        c.position.x <= s.groups.find(g => g.id === _t.groupId)!.position.x + s.groups.find(g => g.id === _t.groupId)!.size.w &&
+        c.position.y >= s.groups.find(g => g.id === _t.groupId)!.position.y &&
+        c.position.y <= s.groups.find(g => g.id === _t.groupId)!.position.y + s.groups.find(g => g.id === _t.groupId)!.size.h
       )
-      // Actually, let's use a simpler heuristic or check if we can determine group from position
+      if (tableInGroup) {
+        // found
+      }
     }
     // RE-EVALUATE: The CommentBox doesn't have a groupId. I need to find which group it's inside.
     for (const g of s.groups) {

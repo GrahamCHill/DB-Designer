@@ -131,7 +131,7 @@
         :connected-as-target="targetColsByTable.get(resource.id) ?? emptySet"
         :read-only="props.readOnly && !props.interactive"
         @mousedown.stop="!props.readOnly && startTableDrag(resource.id, $event)"
-        @select="selectTable(resource.id, $event)"
+        @select="selectTable(resource.id)"
         @start-relation="!props.readOnly && startRelation(resource.id, $event.columnId, $event.event)"
         @end-relation="!props.readOnly && endRelation(resource.id, $event)"
         @edit="!props.readOnly && (store.editingTableId = resource.id)"
@@ -1236,7 +1236,6 @@ function createPrefabAtContext(kind: 'rag' | 'audit') {
 }
 
 function deleteComment(commentId: string) {
-  const comment = store.schema.comments.find(c => c.id === commentId)
   confirmState.value = {
     title: 'Delete Comment',
     message: 'Are you sure you want to delete this comment box?',
@@ -1417,7 +1416,7 @@ function startCommentResize(commentId: string, e: MouseEvent) {
   }
 }
 
-function selectTable(id: string, event?: MouseEvent) {
+function selectTable(id: string, _event?: MouseEvent) {
   if (store.multiSelectedTableIds.has(id)) return
   store.clearMultiSelection()
   store.selectedTableId    = id
@@ -1426,7 +1425,7 @@ function selectTable(id: string, event?: MouseEvent) {
   store.selectedCommentId  = null
 }
 
-function selectComment(id: string, event?: MouseEvent) {
+function selectComment(id: string, _event?: MouseEvent) {
   if (store.multiSelectedCommentIds.has(id)) return
   store.clearMultiSelection()
   store.selectedCommentId  = id
@@ -1489,8 +1488,8 @@ function startGroupDrag(groupId: string, e: MouseEvent) {
   const ownedTablesBefore = new Set(Object.keys(subtreeTableOrigPos))
   const ownedGroupsBefore = new Set(
     store.schema.groups
-      .filter(g => g.parentGroupId === groupId)
-      .map(g => g.id)
+    .filter(g => g.parentGroupId === groupId)
+    .map(g => g.id)
   )
 
   drag.value = {
@@ -1502,13 +1501,12 @@ function startGroupDrag(groupId: string, e: MouseEvent) {
   }
 }
 
-function selectGroup(id: string, event?: MouseEvent) {
+function selectGroup(id: string, _event?: MouseEvent) {
   if (store.multiSelectedGroupIds.has(id)) return
   store.clearMultiSelection()
   store.selectedGroupId    = id
   store.selectedTableId    = null
   store.selectedRelationId = null
-  store.selectedCommentId  = null
 }
 
 // â”€â”€ Group resize â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
