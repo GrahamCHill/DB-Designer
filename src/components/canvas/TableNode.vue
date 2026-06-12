@@ -18,19 +18,17 @@
     @mousedown.stop="$emit('mousedown', $event)"
     @click.stop="$emit('select', $event)"
   >
-    <!-- Header -->
     <div class="table-header" :style="{ borderColor: table.color }">
       <div class="header-left">
         <span class="table-icon" :style="{ color: table.color }">DB</span>
         <span class="table-name">{{ table.name }}</span>
       </div>
       <div class="header-actions">
-        <button v-if="!readOnly" class="icon-btn" @click.stop="$emit('edit')"   title="Edit table">Edit</button>
+        <button v-if="!readOnly" class="icon-btn" @click.stop="$emit('edit')" title="Edit table">Edit</button>
         <button v-if="readOnly" class="icon-btn primary" @click.stop="$emit('generate-api', table)" title="Generate API for this table">API</button>
       </div>
     </div>
 
-    <!-- Columns -->
     <div class="columns-list">
       <div
         v-for="col in table.columns"
@@ -43,19 +41,19 @@
         }"
         :title="columnIssues[col.id]?.join(' | ') ?? ''"
       >
-        <!-- LEFT = input connector -->
         <div
           v-if="!readOnly"
           class="connector connector-left"
           :class="{ connected: connectedAsTarget.has(col.id) }"
           :style="connectedAsTarget.has(col.id) ? { '--dot-color': table.color } : {}"
-          title="Input — drop a relation here"
-          @mouseup.stop="$emit('end-relation', col.id)"
+          title="Left socket - drag or drop a relation"
+          @mousedown.stop="$emit('start-relation', { columnId: col.id, side: 'left', event: $event })"
+          @mouseup.stop="$emit('end-relation', { columnId: col.id, side: 'left' })"
         />
 
         <div class="col-badges">
-          <span v-if="col.primaryKey"     class="badge pk" title="Primary Key">PK</span>
-          <span v-else-if="col.unique"    class="badge uq" title="Unique">UQ</span>
+          <span v-if="col.primaryKey" class="badge pk" title="Primary Key">PK</span>
+          <span v-else-if="col.unique" class="badge uq" title="Unique">UQ</span>
           <span v-else-if="!col.nullable" class="badge nn" title="Not Null">NN</span>
           <span v-else class="badge empty" />
         </div>
@@ -63,21 +61,20 @@
         <span class="col-name">{{ col.name }}</span>
         <span class="col-type">{{ col.type }}</span>
 
-        <!-- RIGHT = output connector -->
         <div
           v-if="!readOnly"
           class="connector connector-right"
           :class="{ connected: connectedAsSource.has(col.id) }"
           :style="connectedAsSource.has(col.id) ? { '--dot-color': table.color } : {}"
-          title="Output — drag to connect"
-          @mousedown.stop="$emit('start-relation', { columnId: col.id, event: $event })"
+          title="Right socket - drag or drop a relation"
+          @mousedown.stop="$emit('start-relation', { columnId: col.id, side: 'right', event: $event })"
+          @mouseup.stop="$emit('end-relation', { columnId: col.id, side: 'right' })"
         />
       </div>
 
       <div v-if="table.columns.length === 0" class="no-columns">No columns yet</div>
     </div>
 
-    <!-- Footer -->
     <div class="table-footer">
       <span class="col-count">{{ table.columns.length }} col{{ table.columns.length !== 1 ? 's' : '' }}</span>
       <span v-if="connectedAsSource.size + connectedAsTarget.size > 0" class="conn-count">
@@ -85,7 +82,6 @@
       </span>
     </div>
 
-    <!-- Resize handle — bottom-right corner -->
     <div
       v-if="!readOnly"
       class="resize-handle"
@@ -112,13 +108,13 @@ defineProps<{
 }>()
 
 defineEmits<{
-  mousedown:      [e: MouseEvent]
-  select:         [e: MouseEvent]
-  edit:           []
-  'start-relation': [data: { columnId: string, event: MouseEvent }]
-  'end-relation':   [columnId: string]
-  'resize-start':   [e: MouseEvent]
-  'generate-api':   [table: Table]
+  mousedown: [e: MouseEvent]
+  select: [e: MouseEvent]
+  edit: []
+  'start-relation': [data: { columnId: string, side: 'left' | 'right', event: MouseEvent }]
+  'end-relation': [data: { columnId: string, side: 'left' | 'right' }]
+  'resize-start': [e: MouseEvent]
+  'generate-api': [table: Table]
 }>()
 
 function hexToRgb(hex: string): string {
@@ -158,7 +154,6 @@ function hexToRgb(hex: string): string {
 }
 .table-node.drawing-mode { cursor: crosshair; }
 
-/* Header */
 .table-header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 12px;
@@ -187,7 +182,6 @@ function hexToRgb(hex: string): string {
 .icon-btn:hover        { color: #fff;    background: #2a2a35; }
 .icon-btn.danger:hover { color: #EF4444; background: #EF444420; }
 
-/* Columns */
 .columns-list { padding: 4px 0; }
 .column-row {
   display: flex; align-items: center; gap: 6px;
@@ -213,7 +207,6 @@ function hexToRgb(hex: string): string {
   color: #f2b1b1;
 }
 
-/* Connectors */
 .connector {
   position: absolute;
   width: 10px; height: 10px; border-radius: 50%;
@@ -238,19 +231,18 @@ function hexToRgb(hex: string): string {
 }
 
 .connector-left::after {
-  content: 'IN'; position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  content: 'L'; position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
   font-size: 8px; font-weight: 700; color: #3a3a55; letter-spacing: 0.08em;
   font-family: 'JetBrains Mono', monospace; pointer-events: none; opacity: 0; transition: opacity 0.12s;
 }
 .connector-right::after {
-  content: 'OUT'; position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  content: 'R'; position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
   font-size: 8px; font-weight: 700; color: #3a3a55; letter-spacing: 0.08em;
   font-family: 'JetBrains Mono', monospace; pointer-events: none; opacity: 0; transition: opacity 0.12s;
 }
 .column-row:hover .connector-left::after,
 .column-row:hover .connector-right::after { opacity: 1; }
 
-/* Badges */
 .col-badges { width: 24px; flex-shrink: 0; }
 .badge { font-size: 9px; font-weight: 700; padding: 1px 4px; border-radius: 3px; letter-spacing: 0.05em; }
 .badge.pk { background: #3ECF8E20; color: #3ECF8E; border: 1px solid #3ECF8E40; }
@@ -259,42 +251,48 @@ function hexToRgb(hex: string): string {
 .badge.empty { display: inline-block; width: 24px; }
 
 .col-name {
-  flex: 1; font-size: 12.5px; color: #d0d0d8;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+  color: #f0f0f0;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .col-type {
-  font-size: 11px; color: #3ECF8E90;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace; flex-shrink: 0;
+  color: #8b95a7;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  flex-shrink: 0;
 }
 .no-columns {
-  padding: 12px; text-align: center; font-size: 12px; color: #444; font-style: italic;
+  padding: 18px 14px;
+  text-align: center;
+  color: #71717a;
+  font-size: 12px;
 }
 
-/* Footer */
 .table-footer {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 5px 12px 6px;
-  border-top: 1px solid #1e1e25;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px 10px;
+  border-top: 1px solid #22232d;
+  color: #71717a;
+  font-size: 11px;
 }
-.col-count  { font-size: 11px; color: #444; }
-.conn-count { font-size: 11px; color: #3ECF8E70; }
+.conn-count { color: #8b95a7; }
 
-/* Resize handle */
 .resize-handle {
   position: absolute;
-  bottom: 3px; right: 5px;
-  font-size: 12px;
-  color: #3a3a50;
-  cursor: se-resize;
-  line-height: 1;
-  user-select: none;
-  transition: color 0.15s;
-  z-index: 20;
+  right: 6px;
+  bottom: 4px;
+  color: #5b6170;
+  cursor: nwse-resize;
+  font-size: 11px;
+  letter-spacing: 0.08em;
 }
-.table-node:hover .resize-handle,
-.table-node.selected .resize-handle { color: #3ECF8E60; }
-.resize-handle:hover { color: #3ECF8E !important; }
 .table-node.read-only {
   cursor: pointer;
 }

@@ -28,16 +28,18 @@
           v-if="!readOnly"
           class="connector connector-left"
           :class="{ connected: connectedAsTarget.has(portId) }"
-          title="Inbound dependency"
-          @mouseup.stop="$emit('end-relation', portId)"
+          title="Left socket - drag or drop a relation"
+          @mousedown.stop="$emit('start-relation', { columnId: portId, side: 'left', event: $event })"
+          @mouseup.stop="$emit('end-relation', { columnId: portId, side: 'left' })"
         />
         <span class="resource-port">{{ portLabel }}</span>
         <div
           v-if="!readOnly"
           class="connector connector-right"
           :class="{ connected: connectedAsSource.has(portId) }"
-          title="Outbound dependency"
-          @mousedown.stop="$emit('start-relation', { columnId: portId, event: $event })"
+          title="Right socket - drag or drop a relation"
+          @mousedown.stop="$emit('start-relation', { columnId: portId, side: 'right', event: $event })"
+          @mouseup.stop="$emit('end-relation', { columnId: portId, side: 'right' })"
         />
       </div>
       <div v-if="table.comment" class="resource-comment">{{ table.comment }}</div>
@@ -62,8 +64,8 @@ defineEmits<{
   mousedown: [e: MouseEvent]
   select: [e: MouseEvent]
   edit: []
-  'start-relation': [data: { columnId: string, event: MouseEvent }]
-  'end-relation': [columnId: string]
+  'start-relation': [data: { columnId: string, side: 'left' | 'right', event: MouseEvent }]
+  'end-relation': [data: { columnId: string, side: 'left' | 'right' }]
 }>()
 
 const resourceLabel = computed(() => {

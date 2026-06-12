@@ -22,6 +22,14 @@
       <!-- Right-side global actions -->
       <div class="ws-right">
         <button
+          class="ws-action-btn"
+          :class="{ 'ws-action-btn-primary': hasAvailableUpdate }"
+          :title="updateStatusMessage || 'Check for a new GitHub release'"
+          :disabled="isCheckingUpdates"
+          @click="checkForAppUpdates"
+        >{{ updateButtonLabel }}</button>
+
+        <button
           v-if="workspaceStore.active === 'db'"
           class="ws-action-btn ws-action-btn-primary"
           title="Export diagram"
@@ -141,12 +149,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import html2canvas from 'html2canvas'
 
 import { useWorkspaceStore } from './stores/workspace'
 import type { Workspace } from './stores/workspace'
+import { useAppUpdates } from './composables/useAppUpdates'
 const workspaceStore = useWorkspaceStore()
+const {
+  buttonLabel: updateButtonLabel,
+  checkForUpdates,
+  checkOrInstall,
+  hasAvailableUpdate,
+  isBusy: isCheckingUpdates,
+  statusMessage: updateStatusMessage,
+} = useAppUpdates()
 
 const workspaces: { id: Workspace; label: string; icon: string }[] = [
   { id: 'db', label: 'DB Schema', icon: 'DB' },
@@ -162,6 +179,10 @@ const codegenCopied = ref(false)
 
 function switchWorkspace(ws: Workspace) {
   workspaceStore.setWorkspace(ws)
+}
+
+async function checkForAppUpdates() {
+  await checkOrInstall()
 }
 
 async function copyQuerySQL() {
@@ -203,6 +224,10 @@ async function downloadCodegenAll() {
 }
 
 watch(() => workspaceStore.active, () => {}, { immediate: true })
+
+onMounted(() => {
+  void checkForUpdates({ silent: true, promptIfAvailable: true })
+})
 
 import { useSchemaStore } from './stores/schema'
 import {

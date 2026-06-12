@@ -2,6 +2,7 @@
 // Copyright (C) 2026 DB Designer Authors
 // Licensed under GNU GPL v3 with generated content exception (see LICENSE).
 
+mod app_updates;
 mod db;
 
 #[tauri::command]
@@ -15,8 +16,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(app_updates::init())
+        .manage(app_updates::PendingUpdate(std::sync::Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             save_export_file,
+            app_updates::fetch_update,
+            app_updates::install_update,
+            app_updates::restart_app,
             db::db_test_connection,
             db::db_import_schema,
         ])

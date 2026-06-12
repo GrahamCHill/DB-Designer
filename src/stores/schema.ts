@@ -1597,7 +1597,7 @@ export const useSchemaStore = defineStore('schema', () => {
         const targetColumn = targetTable.columns.find(column => column.id === relation.targetColumnId)
         const relationText = [
           relationLabel(relation.type),
-          sourceColumn && targetColumn ? `${sourceColumn.name} -> ${targetColumn.name}` : '',
+          sourceColumn && targetColumn ? `${targetColumn.name} <- ${sourceColumn.name}` : '',
         ].filter(Boolean).join(' | ')
         lines.push(`  <text x="${midX}" y="${midY}" text-anchor="middle" class="relation-text">${svgText(relationText)}</text>`)
       }

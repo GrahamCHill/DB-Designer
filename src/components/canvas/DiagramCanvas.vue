@@ -52,7 +52,7 @@
               : (store.selectedRelationId === rel.id ? '#3ECF8E' : '#3ECF8E55')"
             :stroke-width="store.selectedRelationId === rel.id ? 2 : 1.5"
             stroke-dasharray="5,3"
-            marker-end="url(#arrow-end)"
+            marker-start="url(#arrow-end)"
           />
           <!-- Wide hit area -->
           <path
@@ -114,8 +114,8 @@
         :read-only="props.readOnly && !props.interactive"
         @mousedown.stop="!props.readOnly && startTableDrag(table.id, $event)"
         @select="selectTable(table.id, $event)"
-        @start-relation="!props.readOnly && startRelation(table.id, $event.columnId, $event.event)"
-        @end-relation="!props.readOnly && endRelation(table.id, $event)"
+        @start-relation="!props.readOnly && startRelation(table.id, $event.columnId, $event.side, $event.event)"
+        @end-relation="!props.readOnly && endRelation(table.id, $event.columnId, $event.side)"
         @edit="!props.readOnly && (store.editingTableId = table.id)"
         @resize-start="!props.readOnly && startTableResize(table.id, $event)"
         @generate-api="$emit('generate-api', $event)"
@@ -132,8 +132,8 @@
         :read-only="props.readOnly && !props.interactive"
         @mousedown.stop="!props.readOnly && startTableDrag(resource.id, $event)"
         @select="selectTable(resource.id)"
-        @start-relation="!props.readOnly && startRelation(resource.id, $event.columnId, $event.event)"
-        @end-relation="!props.readOnly && endRelation(resource.id, $event)"
+        @start-relation="!props.readOnly && startRelation(resource.id, $event.columnId, $event.side, $event.event)"
+        @end-relation="!props.readOnly && endRelation(resource.id, $event.columnId, $event.side)"
         @edit="!props.readOnly && (store.editingTableId = resource.id)"
       />
     </div>
@@ -546,6 +546,14 @@ function toCanvas(clientX: number, clientY: number) {
   }
 }
 
+function relationSourceSide(rel: Relation): 'left' | 'right' {
+  return rel.sourceSide ?? 'right'
+}
+
+function relationTargetSide(rel: Relation): 'left' | 'right' {
+  return rel.targetSide ?? 'left'
+}
+
 function connectorPos(tableId: string, colId: string, side: 'left' | 'right') {
   const table = store.schema.tables.find(t => t.id === tableId)
   if (!table) return { x: 0, y: 0 }
@@ -623,13 +631,17 @@ function cubicPoint(
 }
 
 function relationRoutePoints(rel: Relation) {
-  const src = connectorPos(rel.sourceTableId, rel.sourceColumnId, 'right')
-  const tgt = connectorPos(rel.targetTableId, rel.targetColumnId, 'left')
+  const src = connectorPos(rel.sourceTableId, rel.sourceColumnId, relationSourceSide(rel))
+  const tgt = connectorPos(rel.targetTableId, rel.targetColumnId, relationTargetSide(rel))
   return [src, ...(relationWaypointById[rel.id] ?? rel.waypoints ?? []), tgt]
 }
 
+function relationRenderPoints(rel: Relation) {
+  return [...relationRoutePoints(rel)].reverse()
+}
+
 function getRelationPath(rel: Relation) {
-  const points = relationRoutePoints(rel)
+  const points = relationRenderPoints(rel)
   if (points.length === 2) return makeCurve(points[0], points[1])
   const segments = getSmoothCurveSegments(points)
   if (segments.length === 0) return ''
@@ -642,22 +654,22 @@ function getRelationPath(rel: Relation) {
 }
 
 function relLabelPos(rel: Relation) {
-  const src = connectorPos(rel.sourceTableId, rel.sourceColumnId, 'right')
-  const tgt = connectorPos(rel.targetTableId, rel.targetColumnId, 'left')
+  const src = connectorPos(rel.sourceTableId, rel.sourceColumnId, relationSourceSide(rel))
+  const tgt = connectorPos(rel.targetTableId, rel.targetColumnId, relationTargetSide(rel))
   return {
-    src: { x: src.x + 14, y: src.y - 6 },
-    tgt: { x: tgt.x - 22, y: tgt.y - 6 },
+    src: { x: src.x + (relationSourceSide(rel) === 'left' ? 14 : -22), y: src.y - 6 },
+    tgt: { x: tgt.x + (relationTargetSide(rel) === 'left' ? 14 : -22), y: tgt.y - 6 },
   }
 }
 
 function relationMidpoint(rel: Relation) {
-  const src = connectorPos(rel.sourceTableId, rel.sourceColumnId, 'right')
-  const tgt = connectorPos(rel.targetTableId, rel.targetColumnId, 'left')
+  const src = connectorPos(rel.sourceTableId, rel.sourceColumnId, relationSourceSide(rel))
+  const tgt = connectorPos(rel.targetTableId, rel.targetColumnId, relationTargetSide(rel))
   return { x: (src.x + tgt.x) / 2, y: (src.y + tgt.y) / 2 }
 }
 
 function relationPathMidpoint(rel: Relation) {
-  const points = relationRoutePoints(rel)
+  const points = relationRenderPoints(rel)
   const samples: { x: number; y: number; distance: number }[] = []
   let total = 0
 
@@ -1566,19 +1578,19 @@ function removeRelationWaypoint(relationId: string, waypointIndex: number) {
 
 // â”€â”€ Relation drawing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-function startRelation(tableId: string, columnId: string, e?: MouseEvent) {
+function startRelation(tableId: string, columnId: string, side: 'left' | 'right', e?: MouseEvent) {
   if (e && (e.ctrlKey || e.metaKey || e.shiftKey)) {
     store.toggleTableSelection(tableId)
     return
   }
-  const pos = connectorPos(tableId, columnId, 'right')
+  const pos = connectorPos(tableId, columnId, side)
   drawingRel.value = {
     fromTableId: tableId, fromColumnId: columnId,
-    side: 'right', mouseX: pos.x, mouseY: pos.y,
+    side, mouseX: pos.x, mouseY: pos.y,
   }
 }
 
-function endRelation(tableId: string, columnId: string) {
+function endRelation(tableId: string, columnId: string, side: 'left' | 'right') {
   if (drawingRel.value && drawingRel.value.fromTableId !== tableId) {
     const sourceTable = store.schema.tables.find(t => t.id === drawingRel.value!.fromTableId)
     const sourceCol = sourceTable?.columns.find(c => c.id === drawingRel.value!.fromColumnId)
@@ -1605,8 +1617,10 @@ function endRelation(tableId: string, columnId: string) {
     store.addRelation({
       sourceTableId: drawingRel.value.fromTableId,
       sourceColumnId: drawingRel.value.fromColumnId,
+      sourceSide: drawingRel.value.side,
       targetTableId: tableId,
       targetColumnId: columnId,
+      targetSide: side,
       type: 'one-to-many',
       label: '',
     })
