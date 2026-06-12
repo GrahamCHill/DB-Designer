@@ -547,11 +547,11 @@ function toCanvas(clientX: number, clientY: number) {
 }
 
 function relationSourceSide(rel: Relation): 'left' | 'right' {
-  return rel.sourceSide ?? 'right'
+  return 'right'
 }
 
 function relationTargetSide(rel: Relation): 'left' | 'right' {
-  return rel.targetSide ?? 'left'
+  return 'left'
 }
 
 function connectorPos(tableId: string, colId: string, side: 'left' | 'right') {
