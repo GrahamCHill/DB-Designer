@@ -226,7 +226,7 @@ async function downloadCodegenAll() {
 watch(() => workspaceStore.active, () => {}, { immediate: true })
 
 onMounted(() => {
-  void checkForUpdates({ silent: true, promptIfAvailable: true })
+  void checkForUpdates({ silent: true, promptIfAvailable: false })
 })
 
 import { useSchemaStore } from './stores/schema'

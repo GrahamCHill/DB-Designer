@@ -38,7 +38,7 @@
       <!-- SVG: relations + labels (inside canvas-content so coords match) -->
       <svg class="relations-svg" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <marker id="arrow-end" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto-start-reverse">
+          <marker id="arrow-end" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
             <polygon points="0 0, 10 3.5, 0 7" fill="#3ECF8E" opacity="0.9" />
           </marker>
         </defs>
@@ -52,7 +52,7 @@
               : (store.selectedRelationId === rel.id ? '#3ECF8E' : '#3ECF8E55')"
             :stroke-width="store.selectedRelationId === rel.id ? 2 : 1.5"
             stroke-dasharray="5,3"
-            marker-start="url(#arrow-end)"
+            marker-end="url(#arrow-end)"
           />
           <!-- Wide hit area -->
           <path
@@ -547,11 +547,11 @@ function toCanvas(clientX: number, clientY: number) {
 }
 
 function relationSourceSide(rel: Relation): 'left' | 'right' {
-  return rel.sourceSide ?? 'right'
+  return rel.sourceSide ?? 'left'
 }
 
 function relationTargetSide(rel: Relation): 'left' | 'right' {
-  return rel.targetSide ?? 'left'
+  return rel.targetSide ?? 'right'
 }
 
 function connectorPos(tableId: string, colId: string, side: 'left' | 'right') {
@@ -636,12 +636,8 @@ function relationRoutePoints(rel: Relation) {
   return [src, ...(relationWaypointById[rel.id] ?? rel.waypoints ?? []), tgt]
 }
 
-function relationRenderPoints(rel: Relation) {
-  return [...relationRoutePoints(rel)].reverse()
-}
-
 function getRelationPath(rel: Relation) {
-  const points = relationRenderPoints(rel)
+  const points = relationRoutePoints(rel)
   if (points.length === 2) return makeCurve(points[0], points[1])
   const segments = getSmoothCurveSegments(points)
   if (segments.length === 0) return ''
@@ -669,7 +665,7 @@ function relationMidpoint(rel: Relation) {
 }
 
 function relationPathMidpoint(rel: Relation) {
-  const points = relationRenderPoints(rel)
+  const points = relationRoutePoints(rel)
   const samples: { x: number; y: number; distance: number }[] = []
   let total = 0
 

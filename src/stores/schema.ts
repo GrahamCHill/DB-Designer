@@ -119,24 +119,11 @@ function relationLabel(type: Relation['type']): string {
 }
 
 function relationSourceSide(relation: Relation): 'left' | 'right' {
-  return relation.sourceSide ?? 'right'
+  return relation.sourceSide ?? 'left'
 }
 
 function relationTargetSide(relation: Relation): 'left' | 'right' {
-  return relation.targetSide ?? 'left'
-}
-
-function reverseMermaidText(value: string): string {
-  if (!value) return value
-  if (value.includes(' <- ')) {
-    const [left, right] = value.split(' <- ')
-    return right && left ? `${right} -> ${left}` : value
-  }
-  if (value.includes(' -> ')) {
-    const [left, right] = value.split(' -> ')
-    return right && left ? `${right} <- ${left}` : value
-  }
-  return value
+  return relation.targetSide ?? 'right'
 }
 
 function svgText(value: string): string {
@@ -541,10 +528,10 @@ export const useSchemaStore = defineStore('schema', () => {
       id: uuidv4(),
       sourceTableId: referencedTable.id,
       sourceColumnId: referencedColumn.id,
-      sourceSide: 'right',
+      sourceSide: 'left',
       targetTableId: owningTable.id,
       targetColumnId: owningColumn.id,
-      targetSide: 'left',
+      targetSide: 'right',
       type: 'one-to-many',
       label,
       waypoints: [],
@@ -735,8 +722,8 @@ export const useSchemaStore = defineStore('schema', () => {
     const rel: Relation = {
       id: uuidv4(),
       waypoints: [],
-      sourceSide: 'right',
-      targetSide: 'left',
+      sourceSide: 'left',
+      targetSide: 'right',
       ...relation,
     }
     sc().relations.push(rel)
@@ -1467,10 +1454,10 @@ export const useSchemaStore = defineStore('schema', () => {
       const relationDirection = resolveMermaidRelation(sourceTable, targetTable, sourceColumn, targetColumn)
       const relationText = [
         relation.label?.trim() || '',
-        reverseMermaidText(relationDirection.text),
+        relationDirection.text,
         relationLabel(relation.type),
       ].filter(Boolean).join(' | ')
-      lines.push(`  ${relationDirection.toNodeId} -->|"${escapeMermaidText(relationText)}"| ${relationDirection.fromNodeId}`)
+      lines.push(`  ${relationDirection.fromNodeId} -->|"${escapeMermaidText(relationText)}"| ${relationDirection.toNodeId}`)
     }
 
     return lines.join('\n')
@@ -1525,7 +1512,7 @@ export const useSchemaStore = defineStore('schema', () => {
             '    </linearGradient>',
           ]
         : []),
-      '    <marker id="dbd-arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto-start-reverse">',
+      '    <marker id="dbd-arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">',
       `      <polygon points="0 0, 10 3.5, 0 7" fill="${styled ? '#0f172a' : '#111111'}" opacity="0.95" />`,
       '    </marker>',
       '    <style>',
@@ -1577,9 +1564,9 @@ export const useSchemaStore = defineStore('schema', () => {
           y: connectorPosition(targetTable, relation.targetColumnId, relationTargetSide(relation)).y + offsetY,
         }
         const shiftedPoints = [
-          shiftedTarget,
-          ...(relation.waypoints ?? []).map(point => ({ x: point.x + offsetX, y: point.y + offsetY })).reverse(),
           shiftedSource,
+          ...(relation.waypoints ?? []).map(point => ({ x: point.x + offsetX, y: point.y + offsetY })),
+          shiftedTarget,
         ]
         const shiftedPath = shiftedPoints.length === 2
           ? makeCurveSegment(shiftedPoints[0], shiftedPoints[1])
@@ -1587,7 +1574,7 @@ export const useSchemaStore = defineStore('schema', () => {
               .slice(0, -1)
               .map((point, index) => makeCurveSegment(point, shiftedPoints[index + 1], index === 0))
               .join(' ')
-        lines.push(`  <path d="${shiftedPath}" fill="none" stroke="#0f172a" stroke-opacity="0.88" stroke-width="2.1" stroke-dasharray="${styled ? '5 3' : 'none'}" marker-start="url(#dbd-arrow)" />`)
+        lines.push(`  <path d="${shiftedPath}" fill="none" stroke="#0f172a" stroke-opacity="0.88" stroke-width="2.1" stroke-dasharray="${styled ? '5 3' : 'none'}" marker-end="url(#dbd-arrow)" />`)
 
         const source = connectorPosition(sourceTable, relation.sourceColumnId, relationSourceSide(relation))
         const target = connectorPosition(targetTable, relation.targetColumnId, relationTargetSide(relation))
@@ -1597,7 +1584,7 @@ export const useSchemaStore = defineStore('schema', () => {
         const targetColumn = targetTable.columns.find(column => column.id === relation.targetColumnId)
         const relationText = [
           relationLabel(relation.type),
-          sourceColumn && targetColumn ? `${targetColumn.name} <- ${sourceColumn.name}` : '',
+          sourceColumn && targetColumn ? `${sourceColumn.name} -> ${targetColumn.name}` : '',
         ].filter(Boolean).join(' | ')
         lines.push(`  <text x="${midX}" y="${midY}" text-anchor="middle" class="relation-text">${svgText(relationText)}</text>`)
       }
@@ -1663,8 +1650,8 @@ export const useSchemaStore = defineStore('schema', () => {
     // @ts-ignore
     json.relations = json.relations.map(r => ({
       waypoints: [],
-      sourceSide: 'right',
-      targetSide: 'left',
+      sourceSide: 'left',
+      targetSide: 'right',
       ...r,
     }))
     // @ts-ignore

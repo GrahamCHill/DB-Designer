@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
+import { confirm } from '@tauri-apps/plugin-dialog'
 
 type UpdateMetadata = {
   version: string
@@ -59,7 +60,11 @@ async function maybePromptForUpdate(force = false) {
   if (!force && promptedVersion.value === update.version) return
 
   promptedVersion.value = update.version
-  const confirmed = window.confirm(buildPromptMessage(update))
+  const confirmed = await confirm(buildPromptMessage(update), {
+    title: 'Install Update',
+    okLabel: 'Install',
+    cancelLabel: 'Later',
+  })
   if (!confirmed) return
 
   await installAvailableUpdate()

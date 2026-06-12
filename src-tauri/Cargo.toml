@@ -1,6 +1,6 @@
 [package]
 name = "db-designer"
-version = "1.0.3"
+version = "1.0.4"
 description = "DB Designer - visual database schema designer"
 authors = ["Graham Hill"]
 edition = "2021"
