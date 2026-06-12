@@ -83,19 +83,36 @@ jobs:
         shell: bash
         run: |
           npm version ${{ needs.prepare-release.outputs.version }} --no-git-tag-version --allow-same-version
-          
-          # Conditionally update tauri.conf.json for Windows signing if thumbprint is present
-          if [ -n "$T_WINDOWS_THUMBPRINT" ]; then
-            echo "Setting Windows certificate thumbprint..."
-            node -e "
-              const fs = require('fs');
-              const config = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+
+          node -e "
+            const fs = require('fs');
+            const configPath = 'src-tauri/tauri.conf.json';
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+            if (!process.env.TAURI_UPDATER_PUBLIC_KEY) {
+              throw new Error('TAURI_UPDATER_PUBLIC_KEY is required for release builds.');
+            }
+
+            config.plugins ??= {};
+            config.plugins.updater = {
+              ...(config.plugins.updater ?? {}),
+              pubkey: process.env.TAURI_UPDATER_PUBLIC_KEY,
+              endpoints: [
+                'https://github.com/GrahamCHill/DB-Designer/releases/latest/download/latest.json'
+              ]
+            };
+
+            if (process.env.T_WINDOWS_THUMBPRINT) {
+              config.bundle ??= {};
+              config.bundle.windows ??= {};
               config.bundle.windows.certificateThumbprint = process.env.T_WINDOWS_THUMBPRINT;
-              fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(config, null, 2));
-            "
-          fi
+            }
+
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+          "
         env:
           T_WINDOWS_THUMBPRINT: ${{ secrets.TAURI_WINDOWS_CERT_THUMBPRINT }}
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
 
       - name: Cache Rust artifacts
         uses: swatinem/rust-cache@v2

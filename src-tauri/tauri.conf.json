@@ -9,6 +9,14 @@
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "__TAURI_UPDATER_PUBLIC_KEY__",
+      "endpoints": [
+        "https://github.com/GrahamCHill/DB-Designer/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "app": {
     "windows": [
       {
