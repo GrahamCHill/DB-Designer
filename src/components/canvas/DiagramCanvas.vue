@@ -1589,9 +1589,7 @@ function startRelation(tableId: string, columnId: string, side: 'left' | 'right'
 function endRelation(tableId: string, columnId: string, side: 'left' | 'right') {
   if (drawingRel.value && drawingRel.value.fromTableId !== tableId) {
     const startTable = store.schema.tables.find(t => t.id === drawingRel.value!.fromTableId)
-    const startCol = startTable?.columns.find(c => c.id === drawingRel.value!.fromColumnId)
     const endTable = store.schema.tables.find(t => t.id === tableId)
-    const endCol = endTable?.columns.find(c => c.id === columnId)
     const normalizedSourceTable = drawingRel.value.side === 'right' ? startTable : endTable
     const normalizedSourceColumnId = drawingRel.value.side === 'right' ? drawingRel.value.fromColumnId : columnId
     const normalizedTargetTable = drawingRel.value.side === 'left' ? startTable : endTable
