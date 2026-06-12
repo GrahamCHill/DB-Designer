@@ -65,8 +65,8 @@ function loadSchema(schemaId: string): Schema | null {
       if (!s.comments) s.comments = []
       s.relations = s.relations.map(r => ({
         waypoints: [],
-        sourceSide: 'left',
-        targetSide: 'right',
+        sourceSide: 'right',
+        targetSide: 'left',
         ...r,
       }))
       s.comments = s.comments.map(comment => ({
@@ -208,8 +208,8 @@ export const useTabsStore = defineStore('tabs', () => {
       })),
       relations: (schema.relations ?? []).map(relation => ({
         ...relation,
-        sourceSide: relation.sourceSide ?? 'left',
-        targetSide: relation.targetSide ?? 'right',
+        sourceSide: relation.sourceSide ?? 'right',
+        targetSide: relation.targetSide ?? 'left',
         waypoints: relation.waypoints ? relation.waypoints.map(waypoint => ({ ...waypoint })) : [],
       })),
       groups: (schema.groups ?? []).map(group => ({ ...group })),

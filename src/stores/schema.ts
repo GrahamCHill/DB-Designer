@@ -119,11 +119,11 @@ function relationLabel(type: Relation['type']): string {
 }
 
 function relationSourceSide(relation: Relation): 'left' | 'right' {
-  return relation.sourceSide ?? 'left'
+  return relation.sourceSide ?? 'right'
 }
 
 function relationTargetSide(relation: Relation): 'left' | 'right' {
-  return relation.targetSide ?? 'right'
+  return relation.targetSide ?? 'left'
 }
 
 function svgText(value: string): string {
@@ -528,10 +528,10 @@ export const useSchemaStore = defineStore('schema', () => {
       id: uuidv4(),
       sourceTableId: referencedTable.id,
       sourceColumnId: referencedColumn.id,
-      sourceSide: 'left',
+      sourceSide: 'right',
       targetTableId: owningTable.id,
       targetColumnId: owningColumn.id,
-      targetSide: 'right',
+      targetSide: 'left',
       type: 'one-to-many',
       label,
       waypoints: [],
@@ -722,8 +722,9 @@ export const useSchemaStore = defineStore('schema', () => {
     const rel: Relation = {
       id: uuidv4(),
       waypoints: [],
-      sourceSide: 'left',
-      targetSide: 'right',
+      sourceSide: 'right',
+      targetSide: 'left',
+      customSides: false,
       ...relation,
     }
     sc().relations.push(rel)
@@ -1650,8 +1651,9 @@ export const useSchemaStore = defineStore('schema', () => {
     // @ts-ignore
     json.relations = json.relations.map(r => ({
       waypoints: [],
-      sourceSide: 'left',
-      targetSide: 'right',
+      sourceSide: 'right',
+      targetSide: 'left',
+      customSides: false,
       ...r,
     }))
     // @ts-ignore

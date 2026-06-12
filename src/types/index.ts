@@ -46,6 +46,7 @@ export interface Relation {
   targetTableId: string
   targetColumnId: string
   targetSide?: 'left' | 'right'
+  customSides?: boolean
   type: RelationType
   label: string
   waypoints?: { x: number; y: number }[]
