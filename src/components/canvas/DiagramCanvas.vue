@@ -546,11 +546,11 @@ function toCanvas(clientX: number, clientY: number) {
   }
 }
 
-function relationSourceSide(rel: Relation): 'left' | 'right' {
+function relationSourceSide(): 'left' | 'right' {
   return 'right'
 }
 
-function relationTargetSide(rel: Relation): 'left' | 'right' {
+function relationTargetSide(): 'left' | 'right' {
   return 'left'
 }
 
@@ -631,8 +631,8 @@ function cubicPoint(
 }
 
 function relationRoutePoints(rel: Relation) {
-  const src = connectorPos(rel.sourceTableId, rel.sourceColumnId, relationSourceSide(rel))
-  const tgt = connectorPos(rel.targetTableId, rel.targetColumnId, relationTargetSide(rel))
+  const src = connectorPos(rel.sourceTableId, rel.sourceColumnId, relationSourceSide())
+  const tgt = connectorPos(rel.targetTableId, rel.targetColumnId, relationTargetSide())
   return [src, ...(relationWaypointById[rel.id] ?? rel.waypoints ?? []), tgt]
 }
 
@@ -650,17 +650,17 @@ function getRelationPath(rel: Relation) {
 }
 
 function relLabelPos(rel: Relation) {
-  const src = connectorPos(rel.sourceTableId, rel.sourceColumnId, relationSourceSide(rel))
-  const tgt = connectorPos(rel.targetTableId, rel.targetColumnId, relationTargetSide(rel))
+  const src = connectorPos(rel.sourceTableId, rel.sourceColumnId, relationSourceSide())
+  const tgt = connectorPos(rel.targetTableId, rel.targetColumnId, relationTargetSide())
   return {
-    src: { x: src.x + (relationSourceSide(rel) === 'left' ? 14 : -22), y: src.y - 6 },
-    tgt: { x: tgt.x + (relationTargetSide(rel) === 'left' ? 14 : -22), y: tgt.y - 6 },
+    src: { x: src.x + (relationSourceSide() === 'left' ? 14 : -22), y: src.y - 6 },
+    tgt: { x: tgt.x + (relationTargetSide() === 'left' ? 14 : -22), y: tgt.y - 6 },
   }
 }
 
 function relationMidpoint(rel: Relation) {
-  const src = connectorPos(rel.sourceTableId, rel.sourceColumnId, relationSourceSide(rel))
-  const tgt = connectorPos(rel.targetTableId, rel.targetColumnId, relationTargetSide(rel))
+  const src = connectorPos(rel.sourceTableId, rel.sourceColumnId, relationSourceSide())
+  const tgt = connectorPos(rel.targetTableId, rel.targetColumnId, relationTargetSide())
   return { x: (src.x + tgt.x) / 2, y: (src.y + tgt.y) / 2 }
 }
 
