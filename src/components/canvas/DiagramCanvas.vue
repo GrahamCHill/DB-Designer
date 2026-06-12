@@ -52,7 +52,8 @@
               : (store.selectedRelationId === rel.id ? '#3ECF8E' : '#3ECF8E55')"
             :stroke-width="store.selectedRelationId === rel.id ? 2 : 1.5"
             stroke-dasharray="5,3"
-            marker-start="url(#arrow-end)"
+            :marker-start="relationMarkerStart(rel)"
+            :marker-end="relationMarkerEnd(rel)"
           />
           <!-- Wide hit area -->
           <path
@@ -636,20 +637,16 @@ function relationRoutePoints(rel: Relation) {
   return [src, ...(relationWaypointById[rel.id] ?? rel.waypoints ?? []), tgt]
 }
 
-function relationRenderPoints(rel: Relation) {
-  const points = relationRoutePoints(rel)
-  const sourceIsRight = relationSourceSide(rel) === 'right'
-  const targetIsRight = relationTargetSide(rel) === 'right'
+function relationMarkerStart(rel: Relation) {
+  return relationSourceSide(rel) === 'right' ? 'url(#arrow-end)' : undefined
+}
 
-  if (targetIsRight && !sourceIsRight) {
-    return [...points].reverse()
-  }
-
-  return points
+function relationMarkerEnd(rel: Relation) {
+  return relationTargetSide(rel) === 'right' ? 'url(#arrow-end)' : undefined
 }
 
 function getRelationPath(rel: Relation) {
-  const points = relationRenderPoints(rel)
+  const points = relationRoutePoints(rel)
   if (points.length === 2) return makeCurve(points[0], points[1])
   const segments = getSmoothCurveSegments(points)
   if (segments.length === 0) return ''
@@ -677,7 +674,7 @@ function relationMidpoint(rel: Relation) {
 }
 
 function relationPathMidpoint(rel: Relation) {
-  const points = relationRenderPoints(rel)
+  const points = relationRoutePoints(rel)
   const samples: { x: number; y: number; distance: number }[] = []
   let total = 0
 
