@@ -38,8 +38,8 @@
       <!-- SVG: relations + labels (inside canvas-content so coords match) -->
       <svg class="relations-svg" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <marker id="arrow-end" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-            <polygon points="0 0, 10 3.5, 0 7" fill="#3ECF8E" opacity="0.9" />
+          <marker id="arrow-end" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="0">
+            <polygon points="10 0, 0 3.5, 10 7" fill="#3ECF8E" opacity="0.9" />
           </marker>
         </defs>
 
