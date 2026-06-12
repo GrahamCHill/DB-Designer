@@ -46,7 +46,7 @@
           class="connector connector-left"
           :class="{ connected: connectedAsTarget.has(col.id) }"
           :style="connectedAsTarget.has(col.id) ? { '--dot-color': table.color } : {}"
-          title="Left socket - drag or drop a relation"
+          title="Input - drop a relation here"
           @mousedown.stop="$emit('start-relation', { columnId: col.id, side: 'left', event: $event })"
           @mouseup.stop="$emit('end-relation', { columnId: col.id, side: 'left' })"
         />
@@ -66,7 +66,7 @@
           class="connector connector-right"
           :class="{ connected: connectedAsSource.has(col.id) }"
           :style="connectedAsSource.has(col.id) ? { '--dot-color': table.color } : {}"
-          title="Right socket - drag or drop a relation"
+          title="Output - drag to connect"
           @mousedown.stop="$emit('start-relation', { columnId: col.id, side: 'right', event: $event })"
           @mouseup.stop="$emit('end-relation', { columnId: col.id, side: 'right' })"
         />

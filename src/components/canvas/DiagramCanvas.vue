@@ -38,7 +38,7 @@
       <!-- SVG: relations + labels (inside canvas-content so coords match) -->
       <svg class="relations-svg" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <marker id="arrow-end" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto-start-reverse">
+          <marker id="arrow-end" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
             <polygon points="0 0, 10 3.5, 0 7" fill="#3ECF8E" opacity="0.9" />
           </marker>
         </defs>
@@ -52,8 +52,7 @@
               : (store.selectedRelationId === rel.id ? '#3ECF8E' : '#3ECF8E55')"
             :stroke-width="store.selectedRelationId === rel.id ? 2 : 1.5"
             stroke-dasharray="5,3"
-            :marker-start="relationMarkerStart(rel)"
-            :marker-end="relationMarkerEnd(rel)"
+            marker-end="url(#arrow-end)"
           />
           <!-- Wide hit area -->
           <path
@@ -635,14 +634,6 @@ function relationRoutePoints(rel: Relation) {
   const src = connectorPos(rel.sourceTableId, rel.sourceColumnId, relationSourceSide(rel))
   const tgt = connectorPos(rel.targetTableId, rel.targetColumnId, relationTargetSide(rel))
   return [src, ...(relationWaypointById[rel.id] ?? rel.waypoints ?? []), tgt]
-}
-
-function relationMarkerStart(rel: Relation) {
-  return relationSourceSide(rel) === 'right' ? 'url(#arrow-end)' : undefined
-}
-
-function relationMarkerEnd(rel: Relation) {
-  return relationTargetSide(rel) === 'right' ? 'url(#arrow-end)' : undefined
 }
 
 function getRelationPath(rel: Relation) {
@@ -1597,36 +1588,46 @@ function startRelation(tableId: string, columnId: string, side: 'left' | 'right'
 
 function endRelation(tableId: string, columnId: string, side: 'left' | 'right') {
   if (drawingRel.value && drawingRel.value.fromTableId !== tableId) {
-    const sourceTable = store.schema.tables.find(t => t.id === drawingRel.value!.fromTableId)
-    const sourceCol = sourceTable?.columns.find(c => c.id === drawingRel.value!.fromColumnId)
-    const targetTable = store.schema.tables.find(t => t.id === tableId)
-    const targetCol = targetTable?.columns.find(c => c.id === columnId)
+    const startTable = store.schema.tables.find(t => t.id === drawingRel.value!.fromTableId)
+    const startCol = startTable?.columns.find(c => c.id === drawingRel.value!.fromColumnId)
+    const endTable = store.schema.tables.find(t => t.id === tableId)
+    const endCol = endTable?.columns.find(c => c.id === columnId)
+    const normalizedSourceTable = drawingRel.value.side === 'right' ? startTable : endTable
+    const normalizedSourceColumnId = drawingRel.value.side === 'right' ? drawingRel.value.fromColumnId : columnId
+    const normalizedTargetTable = drawingRel.value.side === 'left' ? startTable : endTable
+    const normalizedTargetColumnId = drawingRel.value.side === 'left' ? drawingRel.value.fromColumnId : columnId
+    const normalizedSourceCol = normalizedSourceTable?.columns.find(c => c.id === normalizedSourceColumnId)
+    const normalizedTargetCol = normalizedTargetTable?.columns.find(c => c.id === normalizedTargetColumnId)
     const invalidExternalServiceInput = !!(
-      sourceTable?.resourceType === 'external-service' &&
-      (targetTable?.kind ?? 'table') === 'table' &&
-      targetCol &&
+      normalizedSourceTable?.resourceType === 'external-service' &&
+      (normalizedTargetTable?.kind ?? 'table') === 'table' &&
+      normalizedTargetCol &&
       (
-        (!targetCol.primaryKey && !targetCol.unique) ||
-        (targetCol.primaryKey && !isQueryLikeResourceInput(sourceCol?.name))
+        (!normalizedTargetCol.primaryKey && !normalizedTargetCol.unique) ||
+        (normalizedTargetCol.primaryKey && !isQueryLikeResourceInput(normalizedSourceCol?.name))
       )
     )
     if (invalidExternalServiceInput) {
       alert(
-        targetCol?.primaryKey
+        normalizedTargetCol?.primaryKey
           ? 'External services may only connect to a PRIMARY KEY when the connector label is query-like, such as search, request, lookup, or fetch.'
           : 'External services may only connect to UNIQUE keys, or to a PRIMARY KEY when the connector label is query-like.'
       )
       drawingRel.value = null
       return
     }
+    if (drawingRel.value.side === side) {
+      drawingRel.value = null
+      return
+    }
     store.addRelation({
-      sourceTableId: drawingRel.value.fromTableId,
-      sourceColumnId: drawingRel.value.fromColumnId,
-      sourceSide: drawingRel.value.side,
-      targetTableId: tableId,
-      targetColumnId: columnId,
-      targetSide: side,
-      customSides: true,
+      sourceTableId: normalizedSourceTable!.id,
+      sourceColumnId: normalizedSourceColumnId,
+      sourceSide: 'right',
+      targetTableId: normalizedTargetTable!.id,
+      targetColumnId: normalizedTargetColumnId,
+      targetSide: 'left',
+      customSides: false,
       type: 'one-to-many',
       label: '',
     })

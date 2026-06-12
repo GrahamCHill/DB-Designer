@@ -28,7 +28,7 @@
           v-if="!readOnly"
           class="connector connector-left"
           :class="{ connected: connectedAsTarget.has(portId) }"
-          title="Left socket - drag or drop a relation"
+          title="Inbound dependency"
           @mousedown.stop="$emit('start-relation', { columnId: portId, side: 'left', event: $event })"
           @mouseup.stop="$emit('end-relation', { columnId: portId, side: 'left' })"
         />
@@ -37,7 +37,7 @@
           v-if="!readOnly"
           class="connector connector-right"
           :class="{ connected: connectedAsSource.has(portId) }"
-          title="Right socket - drag or drop a relation"
+          title="Outbound dependency"
           @mousedown.stop="$emit('start-relation', { columnId: portId, side: 'right', event: $event })"
           @mouseup.stop="$emit('end-relation', { columnId: portId, side: 'right' })"
         />
