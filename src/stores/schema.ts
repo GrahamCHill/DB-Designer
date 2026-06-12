@@ -1525,7 +1525,7 @@ export const useSchemaStore = defineStore('schema', () => {
             '    </linearGradient>',
           ]
         : []),
-      '    <marker id="dbd-arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">',
+      '    <marker id="dbd-arrow" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto-start-reverse">',
       `      <polygon points="0 0, 10 3.5, 0 7" fill="${styled ? '#0f172a' : '#111111'}" opacity="0.95" />`,
       '    </marker>',
       '    <style>',
