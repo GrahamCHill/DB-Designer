@@ -42,8 +42,10 @@ export interface Relation {
   id: string
   sourceTableId: string
   sourceColumnId: string
+  sourceSide?: 'left' | 'right'
   targetTableId: string
   targetColumnId: string
+  targetSide?: 'left' | 'right'
   type: RelationType
   label: string
   waypoints?: { x: number; y: number }[]

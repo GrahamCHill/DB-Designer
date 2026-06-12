@@ -638,6 +638,7 @@ function importTable(table: any) {
 
 .sidebar-section.flex-grow {
   flex: 1;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -755,9 +756,20 @@ function importTable(table: any) {
 
 .table-palette {
   max-height: 120px;
+  min-height: 0;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+.table-palette::-webkit-scrollbar {
+  width: 3px;
+}
+
+.table-palette::-webkit-scrollbar-thumb {
+  background: #25252f;
+  border-radius: 2px;
 }
 
 .palette-item {
@@ -901,6 +913,7 @@ function importTable(table: any) {
 
 .item-list.scrollable {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
